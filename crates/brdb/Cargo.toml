@@ -2,5 +2,7 @@
 name = "brdb"
 version = "0.0.0"
 edition = "2024"
+description = "A library for reading and writing Brickadia's World files."
+license = "CC0-1.0"
 
 [dependencies]
