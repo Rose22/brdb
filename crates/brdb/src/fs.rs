@@ -203,22 +203,22 @@ impl BrFs {
     }
 
     /// Convert this filesystem to a pending filesystem with unchanged files.
-    pub fn to_pending(&self) -> BrPendingFs {
-        match self {
+    pub fn to_pending(&self, reader: Option<&impl BrFsReader>) -> Result<BrPendingFs, BrFsError> {
+        Ok(match self {
             BrFs::Root(children) => BrPendingFs::Root(
                 children
                     .iter()
-                    .map(|(name, child)| (name.to_owned(), child.to_pending()))
-                    .collect(),
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending(reader)?)))
+                    .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             ),
             BrFs::Folder(_folder, children) => BrPendingFs::Folder(Some(
                 children
                     .iter()
-                    .map(|(name, child)| (name.to_owned(), child.to_pending()))
-                    .collect(),
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending(reader)?)))
+                    .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             )),
-            BrFs::File(_) => BrPendingFs::File(None),
-        }
+            BrFs::File(f) => BrPendingFs::File(reader.map(|r| f.read(r)).transpose()?),
+        })
     }
 
     /// Navigate a brdb filesystem to a specific path.
