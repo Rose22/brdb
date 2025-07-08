@@ -1,3 +1,6 @@
 [workspace]
 members = ["crates/brdb"]
 resolver = "3"
+
+[workspace.dependencies]
+brdb = { path = "crates/brdb" }

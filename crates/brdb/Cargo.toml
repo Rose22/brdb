@@ -11,10 +11,9 @@ repository = "https://github.com/brickadia-community/brdb.git"
 rust-version = "1.88"
 
 [features]
-default = ["brdb", "brz", "compression"]
+default = ["brdb", "brz"]
 brdb = ["rusqlite"]
 brz = []
-compression = []
 
 [build-dependencies]
 lalrpop = "0.22.2"
