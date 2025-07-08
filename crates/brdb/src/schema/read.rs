@@ -422,7 +422,9 @@ fn read_flat_struct_property(
 }
 
 fn read_flat_u8(buf: &mut impl Read) -> Result<u8, BrdbSchemaError> {
-    Ok(buf.read_u8()?)
+    let mut byte = [0; 1];
+    buf.read_exact_buf(&mut byte)?;
+    Ok(byte[0])
 }
 
 fn read_flat_u16(buf: &mut impl Read) -> Result<u16, BrdbSchemaError> {

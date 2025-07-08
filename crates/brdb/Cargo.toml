@@ -1,14 +1,20 @@
 [package]
 name = "brdb"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Isaac <gpg@reheatedcake.io>"]
 description = "A library for reading and writing Brickadia's World files."
 edition = "2024"
 keywords = ["brickadia", "brdb", "brs", "msgpack-schema", "gamedev"]
-license-file = "../../LICENSE"
+license = "CC0-1.0"
 readme = "README.md"
 repository = "https://github.com/brickadia-community/brdb.git"
 rust-version = "1.88"
+
+[features]
+default = ["brdb", "brz", "compression"]
+brdb = ["rusqlite"]
+brz = []
+compression = []
 
 [build-dependencies]
 lalrpop = "0.22.2"
@@ -25,7 +31,10 @@ lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 # msgpack-schema parsing
 rmp = "0.8.14"
 # read write of brdb files
-rusqlite = { version = "0.36.0", features = ["blob", "bundled"] }
+rusqlite = { optional = true, version = "0.36.0", features = [
+  "blob",
+  "bundled",
+] }
 # meta json file serialization
 serde_json = "1.0.140"
 # meta json file serialization

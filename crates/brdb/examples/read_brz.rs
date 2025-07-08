@@ -1,11 +1,12 @@
-use brdb::{BrFsReader, Brdb, IntoReader};
+use brdb::{BrFsReader, Brz, IntoReader};
 use std::path::PathBuf;
 
-/// Reads a world and prints out some of its information
+/// Reads a brz and prints out some of its information
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = PathBuf::from("./world.brdb");
+    let path = PathBuf::from("./prefab.brz");
 
-    let db = Brdb::open(path)?.into_reader();
+    // The API for reading a brz is identical to reading a Brdb
+    let db = Brz::open(path)?.into_reader();
 
     println!("{}", db.get_fs()?.render());
 

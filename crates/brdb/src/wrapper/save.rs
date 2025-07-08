@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use itertools::Itertools;
 
 use crate::{
-    errors::{BrdbError, BrdbWorldError},
-    pending::BrdbPendingFs,
+    errors::{BrError, BrdbWorldError},
+    pending::BrPendingFs,
     schema::{BrdbSchema, BrdbSchemaGlobalData},
     wrapper::{
         Brick, BrickChunkIndexSoA, BrickChunkSoA, ChunkIndex, ComponentChunkSoA, Entity,
@@ -22,8 +22,8 @@ pub struct UnsavedFs {
 }
 
 impl UnsavedFs {
-    pub fn to_pending(self) -> Result<BrdbPendingFs, BrdbError> {
-        BrdbPendingFs::from_unsaved(self)
+    pub fn to_pending(self) -> Result<BrPendingFs, BrError> {
+        BrPendingFs::from_unsaved(self)
     }
 }
 
@@ -173,7 +173,7 @@ impl UnsavedWorld {
         entity_index as usize
     }
 
-    pub(super) fn add_wire(&mut self, wire: &WireConnection) -> Result<(), BrdbError> {
+    pub(super) fn add_wire(&mut self, wire: &WireConnection) -> Result<(), BrError> {
         // Resolve source wire metadata
         let (s_grid, s_chunk, s_brick) = self
             .brick_id_map

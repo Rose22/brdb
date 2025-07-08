@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 
 use crate::{
-    errors::BrdbError,
+    errors::BrError,
     wrapper::{
         Brick, Entity, Guid, Owner, Position, UnsavedFs, UnsavedWorld, WireConnection, WirePort,
         WorldMeta,
@@ -26,7 +26,19 @@ impl World {
         Self::default()
     }
 
-    pub fn to_unsaved(&self) -> Result<UnsavedFs, BrdbError> {
+    // Write a world to a file in the BRDB format
+    #[cfg(feature = "brdb")]
+    pub fn write_brdb(&self, path: impl AsRef<std::path::Path>) -> Result<(), BrError> {
+        crate::Brdb::open(path)?.save("BRDB-RS", self)
+    }
+
+    // Write a world to a file in the BRZ format
+    #[cfg(feature = "brz")]
+    pub fn write_brz(&self, path: impl AsRef<std::path::Path>) -> Result<(), BrError> {
+        crate::Brz::save(path, self)
+    }
+
+    pub fn to_unsaved(&self) -> Result<UnsavedFs, BrError> {
         let mut unsaved_fs = UnsavedFs {
             meta: self.meta.clone(),
             worlds: Default::default(),

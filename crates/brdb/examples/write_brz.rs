@@ -1,4 +1,4 @@
-use brdb::{AsBrdbValue, BrFsReader, Brdb, Brick, IntoReader, World};
+use brdb::{AsBrdbValue, BrFsReader, Brick, Brz, IntoReader, World};
 use std::path::PathBuf;
 
 /// Writes a world with one brick to example_brick
@@ -13,9 +13,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     });
 
-    world.write_brdb(&path)?;
+    world.write_brz(&path)?;
 
-    let db = Brdb::new(&path)?.into_reader();
+    let db = Brz::new(&path)?.into_reader();
 
     println!("file structure: {}", db.get_fs()?.render());
 

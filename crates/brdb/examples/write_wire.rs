@@ -1,4 +1,4 @@
-use brdb::{Brdb, Brick, World, assets};
+use brdb::{BrFsReader, Brdb, Brick, IntoReader, World, assets};
 use std::path::PathBuf;
 
 /// Writes a world with two bricks and a wire to example_wire
