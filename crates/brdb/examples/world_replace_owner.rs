@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Opens a world and replaces its owners with PUBLIC
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let src = PathBuf::from("Parkour.brdb");
+    let src = PathBuf::from("world.brdb");
     let dst = PathBuf::from("world_patched.brz");
 
     assert!(src.exists());
