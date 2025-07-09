@@ -17,15 +17,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chunks = db.brick_chunk_index(1)?;
     println!("Brick chunks: {chunks:?}");
     for chunk in chunks {
-        let soa = db.brick_chunk_soa(1, chunk)?;
+        let soa = db.brick_chunk_soa(1, chunk.index)?;
         println!("Brick soa: {soa}");
-        let (soa, components) = db.component_chunk_soa(1, chunk)?;
-        println!("Components soa: {soa}");
-        for c in components {
-            println!("Component: {c}");
+        if chunk.num_components > 0 {
+            let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
+            println!("Components soa: {soa}");
+            for c in components {
+                println!("Component: {c}");
+            }
         }
-        let soa = db.wire_chunk_soa(1, chunk)?;
-        println!("Wires soa: {soa}");
+        if chunk.num_wires > 0 {
+            let soa = db.wire_chunk_soa(1, chunk.index)?;
+            println!("Wires soa: {soa}");
+        }
     }
 
     println!("Files: {}", db.get_fs()?.render());

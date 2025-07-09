@@ -58,6 +58,32 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ChunkMeta {
+    pub index: ChunkIndex,
+    pub num_bricks: u32,
+    pub num_wires: u32,
+    pub num_components: u32,
+}
+
+impl Deref for ChunkMeta {
+    type Target = ChunkIndex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.index
+    }
+}
+impl AsRef<ChunkIndex> for ChunkMeta {
+    fn as_ref(&self) -> &ChunkIndex {
+        &self.index
+    }
+}
+impl From<ChunkMeta> for ChunkIndex {
+    fn from(value: ChunkMeta) -> Self {
+        value.index
+    }
+}
+
 impl<T> BrReader<T> {
     pub fn new(brdb: T) -> Self
     where
@@ -346,7 +372,7 @@ impl<T> BrReader<T> {
         Ok(schema)
     }
     /// Read the brick chunk indices for a specific grid
-    pub fn brick_chunk_index(&self, grid_id: usize) -> Result<Vec<ChunkIndex>, BrError>
+    pub fn brick_chunk_index(&self, grid_id: usize) -> Result<Vec<ChunkMeta>, BrError>
     where
         T: BrFsReader,
     {
@@ -354,15 +380,24 @@ impl<T> BrReader<T> {
             .read_file(format!("World/0/Bricks/Grids/{grid_id}/ChunkIndex.mps"))?
             .as_slice()
             .read_brdb(&self.brick_chunk_index_schema()?, BRICK_CHUNK_INDEX_SOA)?;
+        let num_bricks = brick_index.prop("NumBricks")?;
+        let num_wires = brick_index.prop("NumWires")?;
+        let num_components = brick_index.prop("NumComponents")?;
         let chunk_indices = brick_index
             .prop("Chunk3DIndices")?
             .as_array()?
             .into_iter()
-            .map(|s| {
-                Ok(ChunkIndex {
-                    x: s.prop("X")?.as_brdb_i16()?,
-                    y: s.prop("Y")?.as_brdb_i16()?,
-                    z: s.prop("Z")?.as_brdb_i16()?,
+            .enumerate()
+            .map(|(i, s)| {
+                Ok(ChunkMeta {
+                    index: ChunkIndex {
+                        x: s.prop("X")?.as_brdb_i16()?,
+                        y: s.prop("Y")?.as_brdb_i16()?,
+                        z: s.prop("Z")?.as_brdb_i16()?,
+                    },
+                    num_bricks: num_bricks.index_unwrap(i)?.as_brdb_u32()?,
+                    num_wires: num_wires.index_unwrap(i)?.as_brdb_u32()?,
+                    num_components: num_components.index_unwrap(i)?.as_brdb_u32()?,
                 })
             })
             .collect::<Result<Vec<_>, BrdbSchemaError>>()?;

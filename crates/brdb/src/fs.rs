@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    fmt::Display,
-};
+use std::fmt::Display;
 
 use indexmap::IndexMap;
 
@@ -19,6 +16,7 @@ pub enum BrFs {
     File(BrFile),
 }
 
+#[cfg(feature = "brdb")]
 pub(crate) fn now() -> i64 {
     // Use a high-resolution timer to get the current time in milliseconds
     let now = std::time::SystemTime::now();
@@ -88,7 +86,7 @@ impl BrFs {
             (l, r) => return Err(BrFsError::InvalidStructure(l.render(), r.to_string()).into()),
         };
 
-        let mut seen = HashSet::new();
+        let mut seen = std::collections::HashSet::new();
 
         for (name, change) in changes {
             if seen.contains(&name) {
@@ -112,7 +110,7 @@ impl BrFs {
         let mut queue = children
             .iter()
             .filter_map(|(name, child)| (!seen.contains(name)).then_some(child))
-            .collect::<VecDeque<_>>();
+            .collect::<std::collections::VecDeque<_>>();
 
         // All descendants of non-visited children must be deleted.
         while let Some(child) = queue.pop_front() {

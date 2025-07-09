@@ -205,17 +205,21 @@ fn test_read_all_components() -> Result<(), BrError> {
     println!("component schemas: {}", db.components_schema()?);
 
     let chunks = db.brick_chunk_index(1)?;
-    println!("chunks: {chunks:?}");
+    println!("Brick chunks: {chunks:?}");
     for chunk in chunks {
-        let soa = db.brick_chunk_soa(1, chunk)?;
-        println!("brick soa: {soa}");
-        let (soa, components) = db.component_chunk_soa(1, chunk)?;
-        println!("components soa: {soa}");
-        for c in components {
-            println!("component: {c}");
+        let soa = db.brick_chunk_soa(1, chunk.index)?;
+        println!("Brick soa: {soa}");
+        if chunk.num_components > 0 {
+            let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
+            println!("Components soa: {soa}");
+            for c in components {
+                println!("Component: {c}");
+            }
         }
-        let soa = db.wire_chunk_soa(1, chunk)?;
-        println!("wires soa: {soa}");
+        if chunk.num_wires > 0 {
+            let soa = db.wire_chunk_soa(1, chunk.index)?;
+            println!("Wires soa: {soa}");
+        }
     }
 
     Ok(())
