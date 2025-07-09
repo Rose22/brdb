@@ -9,6 +9,8 @@ mod errors;
 pub use errors::*;
 
 mod reader;
+#[cfg(test)]
+mod tests;
 
 /// As described in https://gist.github.com/Zeblote/0fc682b9df1a3e82942b613ab70d8a04
 
@@ -184,7 +186,7 @@ impl Brz {
 
         // Verify the hash of the index data
         let index_hash = BrBlob::hash(&index_buf);
-        if index_buf != header.index_hash {
+        if index_hash != header.index_hash {
             return Err(BrzError::InvalidIndexHash(index_hash, header.index_hash));
         }
 
@@ -251,9 +253,13 @@ impl Brz {
         let index_hash = BrBlob::hash(&index_data);
 
         if let Some(level) = zstd_level {
-            index_method = CompressionMethod::GenericZstd;
-            index_data = crate::compression::compress(&index_data, level)?;
             index_size_compressed = index_data.len() as i32;
+            let compressed_data = crate::compression::compress(&index_data, level)?;
+            // Only use the compressed data if it improves file size
+            if index_size_compressed < index_size_uncompressed {
+                index_method = CompressionMethod::GenericZstd;
+                index_data = compressed_data;
+            }
         } else {
             index_size_compressed = 0;
         };
@@ -278,13 +284,13 @@ impl BrzArchiveHeader {
         let index_method = CompressionMethod::try_from(read_u8(r)?)?;
 
         let index_size_uncompressed = read_i32(r)?;
-        if index_size_uncompressed <= 0 {
+        if index_size_uncompressed < 0 {
             return Err(BrzError::InvalidIndexDecompressedLength(
                 index_size_uncompressed,
             ));
         }
         let index_size_compressed = read_i32(r)?;
-        if index_size_compressed <= 0 {
+        if index_size_compressed < 0 {
             return Err(BrzError::InvalidIndexCompressedLength(
                 index_size_compressed,
             ));
@@ -313,15 +319,15 @@ impl BrzArchiveHeader {
 impl BrzIndexData {
     pub fn read(r: &mut impl Read) -> Result<BrzIndexData, BrzError> {
         let num_folders = read_i32(r)?;
-        if num_folders <= 0 {
+        if num_folders < 0 {
             return Err(BrzError::InvalidNumFolders(num_folders));
         }
         let num_files = read_i32(r)?;
-        if num_files <= 0 {
+        if num_files < 0 {
             return Err(BrzError::InvalidNumFiles(num_files));
         }
         let num_blobs = read_i32(r)?;
-        if num_blobs <= 0 {
+        if num_blobs < 0 {
             return Err(BrzError::InvalidNumBlobs(num_blobs));
         }
 

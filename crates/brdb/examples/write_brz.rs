@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db = Brz::new(&path)?.into_reader();
 
-    println!("file structure: {}", db.get_fs()?.render());
+    println!("{}", db.get_fs()?.render());
 
     let soa = db.brick_chunk_soa(1, (0, 0, 0).into())?;
     let color = soa.prop("ColorsAndAlphas")?.index(0)?.unwrap();

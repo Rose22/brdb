@@ -392,21 +392,24 @@ impl BrPendingFs {
                             let compressed =
                                 compress(&content, zstd_level).map_err(BrFsError::Compress)?;
 
+                            let start = blob_data.len();
+
                             if compressed.len() < content.len() {
                                 index.sizes_compressed.push(compressed.len() as i32);
                                 index
                                     .compression_methods
                                     .push(CompressionMethod::GenericZstd);
-                                // Update the blob ranges with this
-                                index
-                                    .blob_ranges
-                                    .push((blob_data.len(), blob_data.len() + compressed.len()));
+                                // Update the blob ranges with compressed size
+                                index.blob_ranges.push((start, start + compressed.len()));
                                 blob_data.extend_from_slice(&compressed);
                             } else {
                                 // If the compressed size is larger than the uncompressed size,
                                 // store it as uncompressed
                                 index.sizes_compressed.push(compressed.len() as i32);
                                 index.compression_methods.push(CompressionMethod::None);
+                                // Update blob ranges with uncompressed size
+                                index.blob_ranges.push((start, start + content.len()));
+                                blob_data.extend_from_slice(&content);
                             }
                         } else {
                             index.sizes_compressed.push(0);
@@ -421,7 +424,7 @@ impl BrPendingFs {
                     index.file_content_ids.push(content_id)
                 }
                 BrPendingFs::File(None) | BrPendingFs::Folder(None) => {
-                    return Err(BrFsError::MissingContent(name).into());
+                    // Noop - these files are ignored.
                 }
             }
         }
