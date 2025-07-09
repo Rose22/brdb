@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use rusqlite::{Connection, params};
 
 use crate::{
-    World,
+    BrFsReader, IntoReader, World,
     compression::compress,
     errors::{BrError, BrFsError},
     fs::{BrFs, now},
@@ -80,6 +80,19 @@ impl Brdb {
         let fs = self.tree(None, 0)?;
         fs.write_pending(description.as_ref(), self, pending, Some(14))?;
         Ok(())
+    }
+
+    // Convert a Brdb to a filled out pending filesystem
+    pub fn to_pending(&self) -> Result<BrPendingFs, BrError> {
+        let reader = self.into_reader();
+        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
+    }
+
+    // Convert a Brdb to a partial pending filesystem, for patching
+    // specific files inside
+    pub fn to_pending_patch(&self) -> Result<BrPendingFs, BrError> {
+        let reader = self.into_reader();
+        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
     }
 
     /// Save a world to the BRDB database.

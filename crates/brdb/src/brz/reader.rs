@@ -9,25 +9,26 @@ use crate::{
     tables::{BrBlob, BrFile, BrFolder},
 };
 
-pub struct BrzIndex {
-    pub archive: Brz,
+pub struct BrzIndex<T: AsRef<Brz>> {
+    pub archive: T,
     /// A map of folder parents and folder names to their indices
     folder_lut: IndexMap<(i32, String), usize>,
     /// A map of file parents and file names to their indices
     files_lut: IndexMap<(i32, String), usize>,
 }
 
-impl From<Brz> for BrzIndex {
-    fn from(brz: Brz) -> Self {
+impl<T: AsRef<Brz>> From<T> for BrzIndex<T> {
+    fn from(brz: T) -> Self {
         Self::new(brz)
     }
 }
 
-impl BrzIndex {
-    pub fn new(brz: Brz) -> Self {
+impl<T: AsRef<Brz>> BrzIndex<T> {
+    pub fn new(brz: T) -> Self {
         let mut folder_lut = IndexMap::new();
-        for (i, name) in brz.index_data.folder_names.iter().enumerate() {
+        for (i, name) in brz.as_ref().index_data.folder_names.iter().enumerate() {
             let parent = brz
+                .as_ref()
                 .index_data
                 .folder_parent_ids
                 .get(i)
@@ -37,8 +38,14 @@ impl BrzIndex {
         }
 
         let mut files_lut = IndexMap::new();
-        for (i, name) in brz.index_data.file_names.iter().enumerate() {
-            let parent = brz.index_data.file_parent_ids.get(i).copied().unwrap_or(-1);
+        for (i, name) in brz.as_ref().index_data.file_names.iter().enumerate() {
+            let parent = brz
+                .as_ref()
+                .index_data
+                .file_parent_ids
+                .get(i)
+                .copied()
+                .unwrap_or(-1);
             files_lut.insert((parent, name.clone()), i);
         }
 
@@ -50,8 +57,8 @@ impl BrzIndex {
     }
 }
 
-impl Deref for BrzIndex {
-    type Target = Brz;
+impl<T: AsRef<Brz>> Deref for BrzIndex<T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.archive
@@ -124,12 +131,12 @@ fn children_of(
     Ok(children)
 }
 
-impl BrFsReader for BrzIndex {
+impl<T: AsRef<Brz>> BrFsReader for BrzIndex<T> {
     fn get_fs(&self) -> Result<BrFs, BrFsError> {
+        let index_data = &self.archive.as_ref().index_data;
         let mut files_by_parent = IndexMap::<i32, Vec<i32>>::default();
-        for i in 0..self.index_data.num_files {
-            let parent = self
-                .index_data
+        for i in 0..index_data.num_files {
+            let parent = index_data
                 .file_parent_ids
                 .get(i as usize)
                 .copied()
@@ -138,9 +145,8 @@ impl BrFsReader for BrzIndex {
         }
 
         let mut folders_by_parent = IndexMap::<i32, Vec<i32>>::default();
-        for i in 0..self.index_data.num_folders {
-            let parent = self
-                .index_data
+        for i in 0..index_data.num_folders {
+            let parent = index_data
                 .folder_parent_ids
                 .get(i as usize)
                 .copied()
@@ -149,7 +155,7 @@ impl BrFsReader for BrzIndex {
         }
 
         Ok(BrFs::Root(children_of(
-            &self.index_data,
+            index_data,
             &files_by_parent,
             &folders_by_parent,
             -1,
@@ -175,13 +181,13 @@ impl BrFsReader for BrzIndex {
     }
 
     fn find_blob(&self, blob_id: i64) -> Result<BrBlob, BrFsError> {
+        let index_data = &self.archive.as_ref().index_data;
         let content_id = blob_id as i32;
-        if content_id < 0 || content_id >= self.index_data.num_blobs {
+        if content_id < 0 || content_id >= index_data.num_blobs {
             return Err(BrFsError::NotFound(format!("blob {content_id}")));
         }
 
-        let compression_method = self
-            .index_data
+        let compression_method = index_data
             .compression_methods
             .get(content_id as usize)
             .ok_or_else(|| {
@@ -189,33 +195,31 @@ impl BrFsReader for BrzIndex {
             })?
             .clone();
 
-        let size_uncompressed = self
-            .index_data
+        let size_uncompressed = index_data
             .sizes_uncompressed
             .get(content_id as usize)
             .ok_or_else(|| BrFsError::NotFound(format!("uncompressed size for blob {content_id}")))?
             .clone() as i64;
-        let size_compressed = self
-            .index_data
+        let size_compressed = index_data
             .sizes_compressed
             .get(content_id as usize)
             .ok_or_else(|| BrFsError::NotFound(format!("compressed size for blob {content_id}")))?
             .clone() as i64;
-        let hash = self
-            .index_data
+        let hash = index_data
             .blob_hashes
             .get(content_id as usize)
             .ok_or_else(|| BrFsError::NotFound(format!("hash for blob {content_id}")))?
             .clone();
 
-        let (blob_start_index, blob_end_index) = self
-            .index_data
+        let (blob_start_index, blob_end_index) = index_data
             .blob_ranges
             .get(content_id as usize)
             .ok_or_else(|| BrFsError::NotFound(format!("range for blob {content_id}")))?
             .clone();
 
         let content = self
+            .archive
+            .as_ref()
             .blob_data
             .get(blob_start_index..blob_end_index)
             .ok_or_else(|| {

@@ -6,6 +6,8 @@ mod errors;
 pub use errors::*;
 pub mod fs;
 pub mod pending;
+#[cfg(test)]
+mod pending_tests;
 pub mod schema;
 pub mod tables;
 mod wrapper;

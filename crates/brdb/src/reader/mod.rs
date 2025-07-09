@@ -46,6 +46,7 @@ pub trait IntoReader {
     where
         Self: Sized;
 }
+
 impl<T> IntoReader for T
 where
     T: BrFsReader,

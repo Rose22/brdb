@@ -1,8 +1,8 @@
 use std::io::{Read, Write};
 
 use crate::{
-    BrReader, IntoReader, World, brz::reader::BrzIndex, compression::decompress, errors::BrError,
-    tables::BrBlob,
+    BrFsReader, BrReader, IntoReader, World, brz::reader::BrzIndex, compression::decompress,
+    errors::BrError, pending::BrPendingFs, tables::BrBlob,
 };
 
 mod errors;
@@ -58,7 +58,7 @@ pub struct BrzArchiveHeader {
     pub index_hash: [u8; 32],
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct BrzIndexData {
     pub num_folders: i32,
     pub num_files: i32,
@@ -92,6 +92,7 @@ pub struct BrzIndexData {
     pub blob_total_size: usize,
 }
 
+#[derive(Clone)]
 pub struct Brz {
     pub index_data: BrzIndexData,
     /// (Compressed) blob data as one contiguous byte array.
@@ -99,7 +100,21 @@ pub struct Brz {
 }
 
 impl IntoReader for Brz {
-    type Inner = BrzIndex;
+    type Inner = BrzIndex<Brz>;
+
+    fn into_reader(self) -> BrReader<Self::Inner> {
+        BrzIndex::new(self).into_reader()
+    }
+}
+
+impl AsRef<Brz> for Brz {
+    fn as_ref(&self) -> &Brz {
+        self
+    }
+}
+
+impl<'a> IntoReader for &'a Brz {
+    type Inner = BrzIndex<&'a Brz>;
 
     fn into_reader(self) -> BrReader<Self::Inner> {
         BrzIndex::new(self).into_reader()
@@ -183,11 +198,27 @@ impl Brz {
         })
     }
 
-    // Write a brz archive to a byte vector.
+    /// Write a brz archive to a byte vector.
     pub fn to_vec(&self, zstd_level: Option<i32>) -> Result<Vec<u8>, BrzError> {
         let mut buf = Vec::new();
         self.write(&mut buf, zstd_level)?;
         Ok(buf)
+    }
+
+    // Convert a Brz to a pending filesystem
+    pub fn to_pending(&self) -> Result<BrPendingFs, BrError> {
+        let reader = self.into_reader();
+        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
+    }
+
+    /// Write a pending fs to a brz file.
+    pub fn write_pending(
+        path: impl AsRef<std::path::Path>,
+        pending: BrPendingFs,
+    ) -> Result<(), BrError> {
+        let mut file = std::fs::File::create(path).map_err(BrzError::IO)?;
+        pending.to_brz_data(Some(14))?.write(&mut file, Some(14))?;
+        Ok(())
     }
 
     /// Write a brz archive to a file.
@@ -206,13 +237,7 @@ impl Brz {
         path: impl AsRef<std::path::Path>,
         world: &World,
     ) -> Result<(), BrError> {
-        let mut file = std::fs::File::create(path).map_err(BrzError::IO)?;
-        world
-            .to_unsaved()?
-            .to_pending()?
-            .to_brz_data(None)?
-            .write(&mut file, None)?;
-        Ok(())
+        Self::write_pending(path, world.to_unsaved()?.to_pending()?)
     }
 
     /// Write a brz archive to a writer.
