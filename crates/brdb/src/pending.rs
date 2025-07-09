@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
+    BrFsError,
     errors::BrError,
     schema::write,
     wrapper::{
@@ -432,6 +433,7 @@ impl BrPendingFs {
         })
     }
 
+    // Get the children of the root if this is a root
     pub fn to_root(self) -> Option<Vec<(String, BrPendingFs)>> {
         match self {
             BrPendingFs::Root(items) => Some(items),
@@ -439,6 +441,7 @@ impl BrPendingFs {
         }
     }
 
+    // Get the children of this folder if this is a folder
     pub fn to_folder(self) -> Option<Vec<(String, BrPendingFs)>> {
         match self {
             BrPendingFs::Folder(items) => items,
@@ -446,11 +449,50 @@ impl BrPendingFs {
         }
     }
 
+    // Get the file content of this pending FS this is a file
     pub fn to_file(self) -> Option<Vec<u8>> {
         match self {
             BrPendingFs::File(items) => items,
             _ => None,
         }
+    }
+
+    /// Apply a PendingFs as a patch to this fs
+    pub fn apply(&mut self, patch: BrPendingFs) -> Result<(), BrFsError> {
+        match (self, patch) {
+            // Root and folders apply patches to existing children and insert new files
+            (BrPendingFs::Folder(Some(children)), BrPendingFs::Folder(Some(patch)))
+            | (BrPendingFs::Root(children), BrPendingFs::Root(patch)) => {
+                let mut patch_map = patch.into_iter().collect::<HashMap<_, _>>();
+                // Patch anything that already exists in the folder
+                for (name, fs) in children.iter_mut() {
+                    let Some(patch) = patch_map.remove(name) else {
+                        continue;
+                    };
+                    fs.apply(patch)?;
+                }
+                // Append the other patches
+                children.extend(patch_map);
+            }
+            // If the folder is empty, insert the patched folder
+            (BrPendingFs::Folder(source @ None), BrPendingFs::Folder(Some(patch))) => {
+                *source = Some(patch);
+            }
+            (BrPendingFs::File(data), BrPendingFs::File(Some(patch))) => {
+                *data = Some(patch);
+            }
+            (BrPendingFs::Folder(_), BrPendingFs::Folder(None))
+            | (BrPendingFs::File(_), BrPendingFs::File(None)) => {
+                // None means no changes for this patch
+            }
+            (left, right) => {
+                return Err(BrFsError::InvalidStructure(
+                    left.to_string(),
+                    right.to_string(),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
