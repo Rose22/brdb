@@ -1,6 +1,5 @@
 use brdb::{
-    AsBrdbValue, Brdb, Brz, Guid, IntoReader, OwnerTableSoA, pending::BrPendingFs,
-    schemas::OWNER_TABLE_SOA,
+    Brdb, Brz, Guid, IntoReader, OwnerTableSoA, pending::BrPendingFs, schemas::OWNER_TABLE_SOA,
 };
 use std::path::PathBuf;
 
@@ -14,51 +13,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = Brdb::open(src)?.into_reader();
 
     let owners = db.owners_soa()?;
-    // Make a new set of owners based on the owners soa
-    let new_soa = OwnerTableSoA {
-        display_names: owners
-            .prop("DisplayNames")?
-            .as_array()?
-            .iter()
-            .map(|_prev| "PUBLIC".to_owned())
-            .collect(),
-        user_names: owners
-            .prop("UserNames")?
-            .as_array()?
-            .iter()
-            .map(|_prev| "PUBLIC".to_owned())
-            .collect(),
-        user_ids: owners
-            .prop("UserIds")?
-            .as_array()?
-            .iter()
-            .map(|_prev| Guid::default())
-            .collect(),
-        brick_counts: owners
-            .prop("BrickCounts")?
-            .as_array()?
-            .iter()
-            .map(|i| i.as_brdb_u32())
-            .collect::<Result<Vec<_>, _>>()?,
-        component_counts: owners
-            .prop("ComponentCounts")?
-            .as_array()?
-            .iter()
-            .map(|i| i.as_brdb_u32())
-            .collect::<Result<Vec<_>, _>>()?,
-        entity_counts: owners
-            .prop("EntityCounts")?
-            .as_array()?
-            .iter()
-            .map(|i| i.as_brdb_u32())
-            .collect::<Result<Vec<_>, _>>()?,
-        wire_counts: owners
-            .prop("WireCounts")?
-            .as_array()?
-            .iter()
-            .map(|i| i.as_brdb_u32())
-            .collect::<Result<Vec<_>, _>>()?,
-    };
+
+    // Parse the owners from BrdbValues
+    let mut new_soa = OwnerTableSoA::try_from(&owners.to_value())?;
+
+    // Modify the owner ids
+    new_soa
+        .display_names
+        .iter_mut()
+        .for_each(|id| *id = "PUBLIC".to_owned());
+    new_soa
+        .user_names
+        .iter_mut()
+        .for_each(|id| *id = "PUBLIC".to_owned());
+    new_soa
+        .user_ids
+        .iter_mut()
+        .for_each(|id| *id = Guid::default());
 
     // convert the owners struct of arrays into bytes using the owners schema
     let content = db.owners_schema()?.write_brdb(OWNER_TABLE_SOA, &new_soa)?;

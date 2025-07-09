@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 /// Writes a world with one brick to example_brick
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = PathBuf::from("./example_brick.brdb");
+    let path = PathBuf::from("./example_brick.brz");
 
     let mut world = World::new();
     world.meta.bundle.description = "Example World".to_string();
