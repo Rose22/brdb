@@ -202,19 +202,32 @@ impl BrFs {
         matches!(self, BrFs::File(_))
     }
 
-    /// Convert this filesystem to a pending filesystem with unchanged files.
-    pub fn to_pending(&self, reader: Option<&impl BrFsReader>) -> Result<BrPendingFs, BrFsError> {
+    /// Convert this filesystem to a pending filesystem with all files present
+    pub fn to_pending(&self, reader: &impl BrFsReader) -> Result<BrPendingFs, BrFsError> {
+        Self::to_pending_internal(&self, Some(reader))
+    }
+
+    /// Convert this filesystem to a pending filesystem all files in Patch mode (None for unchanged)
+    pub fn to_pending_patch(&self) -> Result<BrPendingFs, BrFsError> {
+        Self::to_pending_internal(&self, None::<&()>)
+    }
+
+    /// Convert this filesystem to a pending filesystem
+    fn to_pending_internal(
+        &self,
+        reader: Option<&impl BrFsReader>,
+    ) -> Result<BrPendingFs, BrFsError> {
         Ok(match self {
             BrFs::Root(children) => BrPendingFs::Root(
                 children
                     .iter()
-                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending(reader)?)))
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending_internal(reader)?)))
                     .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             ),
             BrFs::Folder(_folder, children) => BrPendingFs::Folder(Some(
                 children
                     .iter()
-                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending(reader)?)))
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending_internal(reader)?)))
                     .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             )),
             BrFs::File(f) => BrPendingFs::File(reader.map(|r| f.read(r)).transpose()?),

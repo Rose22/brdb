@@ -8,8 +8,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The API for reading a brz is identical to reading a Brdb
     let db = Brz::open(path)?.into_reader();
 
-    println!("{}", db.get_fs()?.render());
-
     let data = db.global_data()?;
     println!("Basic Brick assets: {:?}", data.basic_brick_asset_names);
     println!("Wire ports: {:?}", data.component_wire_port_names);

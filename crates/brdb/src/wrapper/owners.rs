@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::schema::as_brdb::{AsBrdbIter, AsBrdbValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -7,6 +9,39 @@ pub struct Guid {
     pub c: u32,
     pub d: u32,
 }
+
+impl From<Guid> for Uuid {
+    fn from(value: Guid) -> Self {
+        value.uuid()
+    }
+}
+impl From<Uuid> for Guid {
+    fn from(value: Uuid) -> Self {
+        Guid::from_uuid(value)
+    }
+}
+
+impl Guid {
+    pub fn uuid(self) -> Uuid {
+        Uuid::from_u128(
+            (self.a as u128) << 96
+                | (self.b as u128) << 64
+                | (self.c as u128) << 32
+                | (self.d as u128),
+        )
+    }
+
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        let v = uuid.as_u128();
+        Self {
+            a: (v >> 96) as u32,
+            b: (v >> 64) as u32,
+            c: (v >> 32) as u32,
+            d: v as u32,
+        }
+    }
+}
+
 impl Default for Guid {
     fn default() -> Self {
         Self {
@@ -128,8 +163,7 @@ impl AsBrdbValue for OwnerTableSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError>
-    {
+    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "UserIds" => Ok(self.user_ids.as_brdb_iter()),
             "UserNames" => Ok(self.user_names.as_brdb_iter()),

@@ -457,8 +457,14 @@ impl BrPendingFs {
         }
     }
 
-    /// Apply a PendingFs as a patch to this fs
-    pub fn apply(&mut self, patch: BrPendingFs) -> Result<(), BrFsError> {
+    /// Apply a PendingFs as a patch to this FS
+    pub fn with_patch(mut self, patch: BrPendingFs) -> Result<Self, BrFsError> {
+        self.patch(patch)?;
+        Ok(self)
+    }
+
+    /// Apply a PendingFs as a patch to this FS
+    pub fn patch(&mut self, patch: BrPendingFs) -> Result<(), BrFsError> {
         match (self, patch) {
             // Root and folders apply patches to existing children and insert new files
             (BrPendingFs::Folder(Some(children)), BrPendingFs::Folder(Some(patch)))
@@ -469,7 +475,7 @@ impl BrPendingFs {
                     let Some(patch) = patch_map.remove(name) else {
                         continue;
                     };
-                    fs.apply(patch)?;
+                    fs.patch(patch)?;
                 }
                 // Append the other patches
                 children.extend(patch_map);

@@ -2,24 +2,6 @@ use std::fmt::Display;
 
 use crate::{errors::BrFsError, fs::BrFs, tables::BrBlob};
 
-impl<T: BrFsReader> BrFsReader for &T {
-    fn find_folder(&self, parent_id: Option<i64>, name: &str) -> Result<Option<i64>, BrFsError> {
-        (*self).find_folder(parent_id, name)
-    }
-
-    fn find_file(&self, parent_id: Option<i64>, name: &str) -> Result<Option<i64>, BrFsError> {
-        (*self).find_file(parent_id, name)
-    }
-
-    fn find_blob(&self, content_id: i64) -> Result<BrBlob, BrFsError> {
-        (*self).find_blob(content_id)
-    }
-
-    fn get_fs(&self) -> Result<BrFs, BrFsError> {
-        (*self).get_fs()
-    }
-}
-
 pub trait BrFsReader {
     /// Find and read a file from the brdb filesystem, returning its decompressed content as a byte vector.
     fn read_file(&self, path: impl Display) -> Result<Vec<u8>, BrFsError> {
@@ -77,4 +59,40 @@ pub trait BrFsReader {
 
     /// Get the filesystem representation of the BRDB database.
     fn get_fs(&self) -> Result<BrFs, BrFsError>;
+}
+
+impl<T: BrFsReader> BrFsReader for &T {
+    fn find_folder(&self, parent_id: Option<i64>, name: &str) -> Result<Option<i64>, BrFsError> {
+        (*self).find_folder(parent_id, name)
+    }
+
+    fn find_file(&self, parent_id: Option<i64>, name: &str) -> Result<Option<i64>, BrFsError> {
+        (*self).find_file(parent_id, name)
+    }
+
+    fn find_blob(&self, content_id: i64) -> Result<BrBlob, BrFsError> {
+        (*self).find_blob(content_id)
+    }
+
+    fn get_fs(&self) -> Result<BrFs, BrFsError> {
+        (*self).get_fs()
+    }
+}
+
+impl BrFsReader for () {
+    fn find_folder(&self, _parent_id: Option<i64>, _name: &str) -> Result<Option<i64>, BrFsError> {
+        unimplemented!()
+    }
+
+    fn find_file(&self, _parent_id: Option<i64>, _name: &str) -> Result<Option<i64>, BrFsError> {
+        unimplemented!()
+    }
+
+    fn find_blob(&self, _content_id: i64) -> Result<BrBlob, BrFsError> {
+        unimplemented!()
+    }
+
+    fn get_fs(&self) -> Result<BrFs, BrFsError> {
+        unimplemented!()
+    }
 }

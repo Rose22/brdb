@@ -85,14 +85,14 @@ impl Brdb {
     // Convert a Brdb to a filled out pending filesystem
     pub fn to_pending(&self) -> Result<BrPendingFs, BrError> {
         let reader = self.into_reader();
-        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
+        Ok(reader.get_fs()?.to_pending(&*reader)?)
     }
 
     // Convert a Brdb to a partial pending filesystem, for patching
     // specific files inside
     pub fn to_pending_patch(&self) -> Result<BrPendingFs, BrError> {
         let reader = self.into_reader();
-        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
+        Ok(reader.get_fs()?.to_pending(&*reader)?)
     }
 
     /// Save a world to the BRDB database.

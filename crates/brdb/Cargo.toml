@@ -41,3 +41,4 @@ serde = { version = "1.0.219", features = ["derive"] }
 thiserror = "2.0.12"
 # blob compression
 zstd = "0.13.3"
+uuid = { version = "1.17.0", default-features = false, features = ["v4"] }

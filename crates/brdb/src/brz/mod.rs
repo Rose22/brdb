@@ -208,7 +208,7 @@ impl Brz {
     // Convert a Brz to a pending filesystem
     pub fn to_pending(&self) -> Result<BrPendingFs, BrError> {
         let reader = self.into_reader();
-        Ok(reader.get_fs()?.to_pending(Some(&*reader))?)
+        Ok(reader.get_fs()?.to_pending(&*reader)?)
     }
 
     /// Write a pending fs to a brz file.

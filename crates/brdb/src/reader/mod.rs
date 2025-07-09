@@ -9,10 +9,11 @@ use std::{
 };
 
 use crate::{
-    AsBrdbValue, BString, BitFlags, BrdbComponent, ChunkIndex, Entity,
+    AsBrdbValue, BString, BitFlags, BrFsError, BrdbComponent, ChunkIndex, Entity,
     assets::LiteralComponent,
     errors::{BrError, BrdbSchemaError},
     lookup_entity_struct_name,
+    pending::BrPendingFs,
     schema::{BrdbSchema, BrdbSchemaGlobalData, BrdbStruct, BrdbValue, ReadBrdbSchema},
     schemas::{BRICK_COMPONENT_SOA, BRICK_WIRE_SOA},
     wrapper::schemas::{
@@ -73,6 +74,22 @@ impl<T> BrReader<T> {
             entity_chunk_index_schema: Default::default(),
             entities_schema: Default::default(),
         }
+    }
+
+    /// Convert this filesystem to a pending filesystem with all files present
+    pub fn to_pending(&self) -> Result<BrPendingFs, BrFsError>
+    where
+        T: BrFsReader,
+    {
+        self.reader.get_fs()?.to_pending(&self.reader)
+    }
+
+    /// Convert this filesystem to a pending filesystem all files in Patch mode (None for unchanged)
+    pub fn to_pending_patch(&self) -> Result<BrPendingFs, BrFsError>
+    where
+        T: BrFsReader,
+    {
+        self.reader.get_fs()?.to_pending_patch()
     }
 
     /// Read the GlobalData

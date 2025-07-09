@@ -7,8 +7,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let db = Brdb::open(path)?.into_reader();
 
-    println!("{}", db.get_fs()?.render());
-
     let data = db.global_data()?;
     println!("Basic Brick assets: {:?}", data.basic_brick_asset_names);
     println!("Wire ports: {:?}", data.component_wire_port_names);
