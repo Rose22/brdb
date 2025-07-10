@@ -38,6 +38,17 @@ impl World {
         crate::Brz::save(path, self)
     }
 
+    // Write a world to a brz in memory
+    #[cfg(feature = "brz")]
+    pub fn to_brz_vec(&self) -> Result<Vec<u8>, BrError> {
+        let mut data = Vec::new();
+        self.to_unsaved()?
+            .to_pending()?
+            .to_brz_data(Some(14))?
+            .write(&mut data, Some(14))?;
+        Ok(data)
+    }
+
     pub fn to_unsaved(&self) -> Result<UnsavedFs, BrError> {
         let mut unsaved_fs = UnsavedFs {
             meta: self.meta.clone(),

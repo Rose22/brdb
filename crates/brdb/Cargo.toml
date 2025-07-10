@@ -1,6 +1,6 @@
 [package]
 name = "brdb"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Isaac <gpg@reheatedcake.io>"]
 description = "A library for reading and writing Brickadia's World files."
 edition = "2024"
@@ -41,4 +41,4 @@ serde = { version = "1.0.219", features = ["derive"] }
 thiserror = "2.0.12"
 # blob compression
 zstd = "0.13.3"
-uuid = { version = "1.17.0", default-features = false, features = ["v4"] }
+uuid = { version = "1.17.0", default-features = false, features = [] }
