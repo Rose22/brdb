@@ -1,7 +1,8 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    errors::BrdbError,
+    BrFsError,
+    errors::BrError,
     schema::write,
     wrapper::{
         UnsavedFs,
@@ -20,32 +21,32 @@ use crate::{
 ///
 /// A revision will be created along with all of the pending
 #[derive(Debug)]
-pub enum BrdbPendingFs {
-    Root(Vec<(String, BrdbPendingFs)>),
-    Folder(Option<Vec<(String, BrdbPendingFs)>>),
+pub enum BrPendingFs {
+    Root(Vec<(String, BrPendingFs)>),
+    Folder(Option<Vec<(String, BrPendingFs)>>),
     File(Option<Vec<u8>>),
 }
 
 // Helper trait for adding context to errors
 trait Wrap<T> {
-    fn about(self, name: impl Display) -> Result<T, BrdbError>;
-    fn about_f(self, name: impl FnMut() -> String) -> Result<T, BrdbError>;
+    fn about(self, name: impl Display) -> Result<T, BrError>;
+    fn about_f(self, name: impl FnMut() -> String) -> Result<T, BrError>;
 }
 impl<T, E> Wrap<T> for Result<T, E>
 where
-    BrdbError: From<E>,
+    BrError: From<E>,
 {
-    fn about(self, name: impl Display) -> Result<T, BrdbError> {
-        self.map_err(|e| BrdbError::from(e).wrap(name))
+    fn about(self, name: impl Display) -> Result<T, BrError> {
+        self.map_err(|e| BrError::from(e).wrap(name))
     }
-    fn about_f(self, mut name: impl FnMut() -> String) -> Result<T, BrdbError> {
-        self.map_err(|e| BrdbError::from(e).wrap(name()))
+    fn about_f(self, mut name: impl FnMut() -> String) -> Result<T, BrError> {
+        self.map_err(|e| BrError::from(e).wrap(name()))
     }
 }
 
-impl BrdbPendingFs {
-    pub fn from_unsaved(fs: UnsavedFs) -> Result<Self, BrdbError> {
-        use BrdbPendingFs::*;
+impl BrPendingFs {
+    pub fn from_unsaved(fs: UnsavedFs) -> Result<Self, BrError> {
+        use BrPendingFs::*;
         let mut worlds = vec![];
 
         let global_data_schema = schemas::global_data_schema();
@@ -169,7 +170,7 @@ impl BrdbPendingFs {
                             )),
                         ))
                     })
-                    .collect::<Result<Vec<_>, BrdbError>>()?;
+                    .collect::<Result<Vec<_>, BrError>>()?;
                 let component_chunks_dir = grid
                     .components
                     .into_iter()
@@ -203,7 +204,7 @@ impl BrdbPendingFs {
                         }
                         Ok((format!("{chunk}.mps"), File(Some(chunk_buf))))
                     })
-                    .collect::<Result<Vec<_>, BrdbError>>()?;
+                    .collect::<Result<Vec<_>, BrError>>()?;
                 let wire_chunks_dir = grid
                     .wires
                     .iter()
@@ -217,7 +218,7 @@ impl BrdbPendingFs {
                             )),
                         ))
                     })
-                    .collect::<Result<Vec<_>, BrdbError>>()?;
+                    .collect::<Result<Vec<_>, BrError>>()?;
 
                 // Append non-empty chunk directories to the grid directory
                 if !brick_chunks_dir.is_empty() {
@@ -289,7 +290,7 @@ impl BrdbPendingFs {
 
                     Ok((format!("{chunk}.mps"), File(Some(buf))))
                 })
-                .collect::<Result<Vec<_>, BrdbError>>()?;
+                .collect::<Result<Vec<_>, BrError>>()?;
 
             // Only add the Chunks directory if there are any chunks
             if !entities_chunks_dir.is_empty() {
@@ -328,32 +329,189 @@ impl BrdbPendingFs {
         Ok(Root(vec![meta_dir, world_dir]))
     }
 
-    pub fn to_root(self) -> Option<Vec<(String, BrdbPendingFs)>> {
+    #[cfg(feature = "brz")]
+    /// Convert this pending FS into a BRZ archive
+    pub fn to_brz_data(self, zstd_level: Option<i32>) -> Result<crate::brz::Brz, BrError> {
+        use std::collections::{HashMap, VecDeque};
+
+        use crate::{
+            brz::{Brz, BrzIndexData, CompressionMethod},
+            compression::compress,
+            errors::BrFsError,
+        };
+
+        let mut queue = VecDeque::new();
+        queue.push_front((None, "Root".to_owned(), self));
+
+        let mut index = BrzIndexData::default();
+        let mut blob_data = Vec::new();
+        let mut hash_to_blob_index: HashMap<[u8; 32], i32> = HashMap::new();
+
+        while let Some((parent_id, name, fs)) = queue.pop_front() {
+            match fs {
+                BrPendingFs::Root(items) => {
+                    for (name, item) in items {
+                        queue.push_back((None, name, item));
+                    }
+                }
+
+                // Insert the folder, then all of its children
+                BrPendingFs::Folder(Some(items)) => {
+                    let folder_id = index.num_folders;
+                    // Add this folder
+                    index.num_folders += 1;
+                    index.folder_parent_ids.push(parent_id.unwrap_or(-1));
+                    index.folder_names.push(name.clone());
+
+                    // Queue the folder's children
+                    for (item_name, item_fs) in items {
+                        queue.push_back((Some(folder_id), item_name, item_fs));
+                    }
+                }
+
+                // Insert the file, and its content if it was not already inserted
+                BrPendingFs::File(Some(content)) => {
+                    use crate::tables::BrBlob;
+
+                    index.num_files += 1;
+                    index.file_parent_ids.push(parent_id.unwrap_or(-1));
+                    index.file_names.push(name.clone());
+                    let hash = BrBlob::hash(&content);
+
+                    let content_id = if content.is_empty() {
+                        -1
+                    } else if let Some(i) = hash_to_blob_index.get(&hash) {
+                        *i
+                    } else {
+                        let blob_id = index.num_blobs;
+                        index.num_blobs += 1;
+
+                        hash_to_blob_index.insert(hash.clone(), blob_id);
+                        index.blob_hashes.push(hash);
+                        index.sizes_uncompressed.push(content.len() as i32);
+
+                        let start = blob_data.len();
+
+                        // Compress the content if a zstd level is specified
+                        if let Some(zstd_level) = zstd_level {
+                            let compressed =
+                                compress(&content, zstd_level).map_err(BrFsError::Compress)?;
+
+                            if compressed.len() < content.len() {
+                                index.sizes_compressed.push(compressed.len() as i32);
+                                index
+                                    .compression_methods
+                                    .push(CompressionMethod::GenericZstd);
+                                // Update the blob ranges with compressed size
+                                blob_data.extend_from_slice(&compressed);
+                            } else {
+                                // If the compressed size is larger than the uncompressed size,
+                                // store it as uncompressed
+                                index.sizes_compressed.push(content.len() as i32);
+                                index.compression_methods.push(CompressionMethod::None);
+                                // Update blob ranges with uncompressed size
+                                blob_data.extend_from_slice(&content);
+                            }
+                        } else {
+                            index.sizes_compressed.push(content.len() as i32);
+                            index
+                                .compression_methods
+                                .push(crate::brz::CompressionMethod::None);
+                            blob_data.extend_from_slice(&content);
+                        }
+
+                        index.blob_ranges.push((start, blob_data.len()));
+                        blob_id
+                    };
+
+                    index.file_content_ids.push(content_id)
+                }
+                BrPendingFs::File(None) | BrPendingFs::Folder(None) => {
+                    // Noop - these files are ignored.
+                }
+            }
+        }
+        index.blob_total_size = blob_data.len();
+
+        Ok(Brz {
+            index_data: index,
+            blob_data,
+        })
+    }
+
+    // Get the children of the root if this is a root
+    pub fn to_root(self) -> Option<Vec<(String, BrPendingFs)>> {
         match self {
-            BrdbPendingFs::Root(items) => Some(items),
+            BrPendingFs::Root(items) => Some(items),
             _ => None,
         }
     }
 
-    pub fn to_folder(self) -> Option<Vec<(String, BrdbPendingFs)>> {
+    // Get the children of this folder if this is a folder
+    pub fn to_folder(self) -> Option<Vec<(String, BrPendingFs)>> {
         match self {
-            BrdbPendingFs::Folder(items) => items,
+            BrPendingFs::Folder(items) => items,
             _ => None,
         }
     }
 
+    // Get the file content of this pending FS this is a file
     pub fn to_file(self) -> Option<Vec<u8>> {
         match self {
-            BrdbPendingFs::File(items) => items,
+            BrPendingFs::File(items) => items,
             _ => None,
         }
+    }
+
+    /// Apply a PendingFs as a patch to this FS
+    pub fn with_patch(mut self, patch: BrPendingFs) -> Result<Self, BrFsError> {
+        self.patch(patch)?;
+        Ok(self)
+    }
+
+    /// Apply a PendingFs as a patch to this FS
+    pub fn patch(&mut self, patch: BrPendingFs) -> Result<(), BrFsError> {
+        match (self, patch) {
+            // Root and folders apply patches to existing children and insert new files
+            (BrPendingFs::Folder(Some(children)), BrPendingFs::Folder(Some(patch)))
+            | (BrPendingFs::Root(children), BrPendingFs::Root(patch)) => {
+                let mut patch_map = patch.into_iter().collect::<HashMap<_, _>>();
+                // Patch anything that already exists in the folder
+                for (name, fs) in children.iter_mut() {
+                    let Some(patch) = patch_map.remove(name) else {
+                        continue;
+                    };
+                    fs.patch(patch)?;
+                }
+                // Append the other patches
+                children.extend(patch_map);
+            }
+            // If the folder is empty, insert the patched folder
+            (BrPendingFs::Folder(source @ None), BrPendingFs::Folder(Some(patch))) => {
+                *source = Some(patch);
+            }
+            (BrPendingFs::File(data), BrPendingFs::File(Some(patch))) => {
+                *data = Some(patch);
+            }
+            (BrPendingFs::Folder(_), BrPendingFs::Folder(None))
+            | (BrPendingFs::File(_), BrPendingFs::File(None)) => {
+                // None means no changes for this patch
+            }
+            (left, right) => {
+                return Err(BrFsError::InvalidStructure(
+                    left.to_string(),
+                    right.to_string(),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
-impl Display for BrdbPendingFs {
+impl Display for BrPendingFs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BrdbPendingFs::Root(items) => write!(
+            BrPendingFs::Root(items) => write!(
                 f,
                 "[{}]",
                 items
@@ -362,7 +520,7 @@ impl Display for BrdbPendingFs {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            BrdbPendingFs::Folder(items) => write!(
+            BrPendingFs::Folder(items) => write!(
                 f,
                 "[{}]",
                 items
@@ -374,7 +532,7 @@ impl Display for BrdbPendingFs {
                         .join(", "))
                     .unwrap_or_else(|| "empty".to_string())
             ),
-            BrdbPendingFs::File(content) => write!(
+            BrPendingFs::File(content) => write!(
                 f,
                 "({})",
                 content
@@ -383,242 +541,5 @@ impl Display for BrdbPendingFs {
                     .unwrap_or_default()
             ),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::error::Error;
-
-    use crate::{
-        pending::BrdbPendingFs,
-        schema::{ReadBrdbSchema, as_brdb::AsBrdbValue},
-        wrapper::{
-            Brick, Entity, World,
-            schemas::{
-                BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_COMPONENT_SOA, BRICK_WIRE_SOA,
-                ENTITY_CHUNK_SOA, GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
-            },
-        },
-    };
-
-    #[test]
-    fn test_brick_write() -> Result<(), Box<dyn Error>> {
-        let mut world = World::new();
-        world.add_brick(Brick {
-            position: (0, 0, 3).into(),
-            color: (255, 0, 0).into(),
-            ..Default::default()
-        });
-        world.add_brick_grid(
-            Entity {
-                frozen: true,
-                ..Default::default()
-            },
-            [Brick {
-                position: (0, 0, 3).into(),
-                color: (255, 0, 0).into(),
-                ..Default::default()
-            }],
-        );
-
-        let pending = world.to_unsaved()?.to_pending()?;
-        let root = pending.to_root().unwrap();
-
-        // Get the world from the root of the tree,
-        // validate the Meta dir exists
-        let world_dir = 'world: {
-            for (name, root_dir) in root {
-                let children = root_dir.to_folder().unwrap();
-                match name.as_str() {
-                    // Ensure all expected meta files exist
-                    "Meta" => {
-                        children.into_iter().for_each(|(n, _)| match n.as_str() {
-                            "World.json" | "Bundle.json" | "Screenshot.jpg" => {}
-                            other => panic!("unknown Meta/{other}"),
-                        });
-                        continue;
-                    }
-                    "World" => {
-                        assert_eq!(children.len(), 1);
-                        // Get the /0 directory in the world
-                        break 'world children.into_iter().next().unwrap().1.to_folder().unwrap();
-                    }
-                    other => panic!("unknown {other}"),
-                };
-            }
-            unreachable!()
-        };
-
-        let mut owners_schema = None;
-        let mut owners_vec = None;
-        let mut global_data_schema = None;
-        let mut global_data_vec = None;
-        let mut bricks_dir = None;
-        let mut entities_dir = None;
-
-        for (n, d) in world_dir {
-            match (n.as_str(), d) {
-                ("Owners.schema", BrdbPendingFs::File(Some(data))) => {
-                    owners_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                ("Owners.mps", BrdbPendingFs::File(data)) => {
-                    owners_vec = data;
-                }
-                ("GlobalData.schema", BrdbPendingFs::File(Some(data))) => {
-                    global_data_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                ("GlobalData.mps", BrdbPendingFs::File(data)) => {
-                    global_data_vec = data;
-                }
-                ("Bricks", BrdbPendingFs::Folder(items)) => {
-                    bricks_dir = items;
-                }
-                ("Entities", BrdbPendingFs::Folder(items)) => {
-                    entities_dir = items;
-                }
-                (name, BrdbPendingFs::File(_)) => unreachable!("{name}: no more files"),
-                (name, BrdbPendingFs::Folder(_)) => unreachable!("{name}: no more folders"),
-                (name, BrdbPendingFs::Root(_)) => unreachable!("{name}: no root"),
-            }
-        }
-
-        // Ensure global data can read completely
-        let global_data = global_data_vec
-            .unwrap()
-            .as_slice()
-            .read_brdb(global_data_schema.as_ref().unwrap(), GLOBAL_DATA_SOA)?;
-
-        // Ensure owners can read completely
-        let _owners = owners_vec
-            .unwrap()
-            .as_slice()
-            .read_brdb(&owners_schema.unwrap(), OWNER_TABLE_SOA)?;
-
-        let mut brick_index_schema = None;
-        let mut brick_schema = None;
-        let mut component_schema = None;
-        let mut wire_schema = None;
-        let mut brick_grids = None;
-
-        for (n, fs) in bricks_dir.unwrap() {
-            match (n.as_str(), fs) {
-                ("Grids", BrdbPendingFs::Folder(items)) => {
-                    brick_grids = items;
-                }
-                ("ChunkIndexShared.schema", BrdbPendingFs::File(Some(data))) => {
-                    brick_index_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                ("ChunksShared.schema", BrdbPendingFs::File(Some(data))) => {
-                    brick_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                ("ComponentsShared.schema", BrdbPendingFs::File(Some(data))) => {
-                    component_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                ("WiresShared.schema", BrdbPendingFs::File(Some(data))) => {
-                    wire_schema = Some(data.as_slice().read_brdb_schema()?);
-                }
-                (other, f) => unreachable!("unknown Bricks/{other}: {f}"),
-            }
-        }
-
-        let component_schema = component_schema.as_ref().unwrap();
-
-        for (grid_id, grid) in brick_grids.unwrap() {
-            let children = grid.to_folder().unwrap();
-            for (n, child) in children {
-                match (n.as_str(), child) {
-                    ("Chunks", BrdbPendingFs::Folder(Some(chunks))) => {
-                        for (_, c) in chunks {
-                            let _chunk = c
-                                .to_file()
-                                .unwrap()
-                                .as_slice()
-                                .read_brdb(brick_schema.as_ref().unwrap(), BRICK_CHUNK_SOA)?;
-                        }
-                    }
-                    ("Components", BrdbPendingFs::Folder(Some(chunks))) => {
-                        for (_, c) in chunks {
-                            let content = c.to_file().unwrap();
-                            let buf = &mut content.as_slice();
-                            let chunk = buf.read_brdb(&component_schema, BRICK_COMPONENT_SOA)?;
-
-                            let type_counters = chunk.prop("ComponentTypeCounters")?.as_array()?;
-                            for counter in type_counters {
-                                let type_idx =
-                                    counter.as_struct()?.prop("TypeIndex")?.as_brdb_u32()?;
-                                let num_instances =
-                                    counter.as_struct()?.prop("NumInstances")?.as_brdb_u32()?;
-                                let struct_name = global_data
-                                    .prop("ComponentDataStructNames")?
-                                    .index(type_idx as usize)?
-                                    .map(|s| s.as_str())
-                                    .transpose()?
-                                    .unwrap_or("illegal")
-                                    .to_owned();
-
-                                if struct_name == "None" {
-                                    continue;
-                                }
-
-                                for _ in 0..num_instances {
-                                    let _component =
-                                        buf.read_brdb(&component_schema, &struct_name)?;
-                                }
-                            }
-                        }
-                    }
-                    ("Wires", BrdbPendingFs::Folder(Some(chunks))) => {
-                        for (_, c) in chunks {
-                            let _chunk = c
-                                .to_file()
-                                .unwrap()
-                                .as_slice()
-                                .read_brdb(wire_schema.as_ref().unwrap(), BRICK_WIRE_SOA)?;
-                        }
-                    }
-                    ("ChunkIndex.mps", BrdbPendingFs::File(data)) => {
-                        // read the chunk index
-                        let _chunk_index = data.unwrap().as_slice().read_brdb(
-                            brick_index_schema.as_ref().unwrap(),
-                            BRICK_CHUNK_INDEX_SOA,
-                        )?;
-                    }
-                    (n, other) => unreachable!("unknown Grids/{grid_id}/{n}: {other}"),
-                }
-            }
-        }
-
-        let mut _entity_index_schema = None;
-        let mut _entity_index_vec = None;
-        let mut entity_schema = None;
-        let mut entity_chunks = None;
-
-        for (n, fs) in entities_dir.unwrap() {
-            match (n.as_str(), fs) {
-                ("Chunks", BrdbPendingFs::Folder(items)) => {
-                    entity_chunks = items;
-                }
-                ("ChunksShared.schema", BrdbPendingFs::File(data)) => {
-                    entity_schema = Some(data.unwrap().as_slice().read_brdb_schema()?);
-                }
-                ("ChunkIndex.schema", BrdbPendingFs::File(data)) => {
-                    _entity_index_schema = Some(data.unwrap().as_slice().read_brdb_schema()?);
-                }
-                ("ChunkIndex.mps", BrdbPendingFs::File(data)) => {
-                    _entity_index_vec = data;
-                }
-                (n, other) => unreachable!("unknown Entities/{n}: {other}"),
-            }
-        }
-
-        // Ensure all the chunks can be read
-        for (_chunk_id, chunk) in entity_chunks.unwrap() {
-            let content = chunk.to_file().unwrap();
-            let buf = &mut content.as_slice();
-            let _chunk_data = buf.read_brdb(entity_schema.as_ref().unwrap(), ENTITY_CHUNK_SOA)?;
-        }
-
-        Ok(())
     }
 }

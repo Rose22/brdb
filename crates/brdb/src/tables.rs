@@ -1,9 +1,7 @@
-use std::io::{Read, Write};
-
-use crate::errors::BrdbFsError;
+use crate::{compression::decompress, errors::BrFsError};
 
 #[derive(Clone, Debug)]
-pub struct BrdbBlob {
+pub struct BrBlob {
     pub blob_id: i64,
     pub compression: i64,
     pub size_uncompressed: i64,
@@ -13,29 +11,20 @@ pub struct BrdbBlob {
     pub content: Vec<u8>,
 }
 
-impl BrdbBlob {
+impl BrBlob {
     /// Get the BLAKE3 hash of the given content.
-    pub fn hash(content: &[u8]) -> Vec<u8> {
-        blake3::hash(content).as_bytes().to_vec()
-    }
-
-    /// Compress the given content using zstd with the specified level.
-    pub fn compress(content: &[u8], zstd_level: i32) -> Result<Vec<u8>, std::io::Error> {
-        let mut compressed = vec![];
-        let mut enc = zstd::Encoder::new(&mut compressed, zstd_level)?;
-        enc.write_all(content)?;
-        enc.do_finish()?;
-        Ok(compressed)
+    pub fn hash(content: &[u8]) -> [u8; 32] {
+        *blake3::hash(content).as_bytes()
     }
 
     /// Read (and decompress) the content of a blob in the brdb filesystem.
-    pub fn read(self) -> Result<Vec<u8>, BrdbFsError> {
+    pub fn read(self) -> Result<Vec<u8>, BrFsError> {
         let content = if self.compression == 0 {
             self.content
         } else {
             // Ensure blob compressed content length is correct
             if self.content.len() != self.size_compressed as usize {
-                return Err(BrdbFsError::InvalidSize {
+                return Err(BrFsError::InvalidSize {
                     name: "compressed content".to_string(),
                     found: self.content.len(),
                     expected: self.size_compressed as usize,
@@ -43,17 +32,13 @@ impl BrdbBlob {
             }
 
             // Decompress the content
-            let mut output = vec![0u8; self.size_uncompressed as usize];
-            zstd::Decoder::new(self.content.as_slice())
-                .map_err(BrdbFsError::Decompress)?
-                .read_exact(&mut output)
-                .map_err(BrdbFsError::Decompress)?;
-            output
+            decompress(&self.content, self.size_uncompressed as usize)
+                .map_err(BrFsError::Decompress)?
         };
 
         // Verify the size of the decompressed content
         if content.len() != self.size_uncompressed as usize {
-            return Err(BrdbFsError::InvalidSize {
+            return Err(BrFsError::InvalidSize {
                 name: "uncompressed content".to_string(),
                 found: content.len(),
                 expected: self.size_uncompressed as usize,
@@ -64,8 +49,8 @@ impl BrdbBlob {
 
         // Verify the hash of the decompressed content
         if hash != self.hash.as_slice() {
-            return Err(BrdbFsError::InvalidHash {
-                found: hash,
+            return Err(BrFsError::InvalidHash {
+                found: hash.to_vec(),
                 expected: self.hash,
             });
         }
@@ -75,14 +60,14 @@ impl BrdbBlob {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct BrdbRevision {
+pub struct BrRevision {
     pub revision_id: i64,
     pub description: String,
     pub created_at: i64,
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct BrdbFolder {
+pub struct BrFolder {
     pub folder_id: i64,
     pub parent_id: Option<i64>, // references folder_id
     pub name: String,
@@ -92,7 +77,7 @@ pub struct BrdbFolder {
 
 #[derive(Default, Clone, Debug)]
 
-pub struct BrdbFile {
+pub struct BrFile {
     pub file_id: i64,
     pub parent_id: Option<i64>, // references folders(folder_id),
     pub name: String,

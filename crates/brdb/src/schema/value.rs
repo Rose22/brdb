@@ -55,6 +55,16 @@ impl BrdbStruct {
         }
         Ok(map)
     }
+
+    pub fn to_value(self) -> BrdbValue {
+        BrdbValue::Struct(Box::new(self.clone()))
+    }
+}
+
+impl From<BrdbStruct> for BrdbValue {
+    fn from(value: BrdbStruct) -> Self {
+        BrdbValue::Struct(Box::new(value))
+    }
 }
 
 impl Display for BrdbStruct {
@@ -462,3 +472,106 @@ impl PartialEq for BrdbValue {
         }
     }
 }
+
+impl TryFrom<&BrdbValue> for String {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        value.as_str().map(|s| s.to_string())
+    }
+}
+impl TryFrom<BrdbValue> for String {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: BrdbValue) -> Result<Self, Self::Error> {
+        match value {
+            BrdbValue::String(s) => Ok(s),
+            _ => Err(BrdbSchemaError::ExpectedType(
+                "string".to_owned(),
+                value.get_type().to_string(),
+            )),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a BrdbValue> for &'a str {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &'a BrdbValue) -> Result<&'a str, Self::Error> {
+        if let BrdbValue::String(v) = value {
+            Ok(v.as_ref())
+        } else {
+            Err(BrdbSchemaError::ExpectedType(
+                "string".to_owned(),
+                value.get_type().to_string(),
+            ))
+        }
+    }
+}
+
+impl<'a, T: TryFrom<&'a BrdbValue, Error = BrdbSchemaError>> TryFrom<&'a BrdbValue> for Vec<T> {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &'a BrdbValue) -> Result<Self, Self::Error> {
+        let array = value.as_array()?;
+        let mut vec = Vec::with_capacity(array.len());
+        for item in array {
+            vec.push(T::try_from(item)?);
+        }
+        Ok(vec)
+    }
+}
+
+impl<T: TryFrom<BrdbValue, Error = BrdbSchemaError>> TryFrom<BrdbValue> for Vec<T> {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: BrdbValue) -> Result<Self, Self::Error> {
+        let array = match value {
+            BrdbValue::Array(v) => v,
+            BrdbValue::FlatArray(v) => v,
+            _ => {
+                return Err(BrdbSchemaError::ExpectedType(
+                    "array".to_owned(),
+                    value.get_type().to_string(),
+                ));
+            }
+        };
+        let mut vec = Vec::with_capacity(array.len());
+        for item in array {
+            vec.push(T::try_from(item)?);
+        }
+        Ok(vec)
+    }
+}
+
+macro_rules! try_from_impl(
+    ($id:ident @ $ty:ty) => {
+        impl TryFrom<&BrdbValue> for $ty {
+            type Error = BrdbSchemaError;
+
+            fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+                value.$id()
+            }
+        }
+        impl TryFrom<BrdbValue> for $ty {
+            type Error = BrdbSchemaError;
+
+            fn try_from(value: BrdbValue) -> Result<Self, Self::Error> {
+                value.$id()
+            }
+        }
+
+    }
+);
+
+try_from_impl!(as_brdb_bool @ bool);
+try_from_impl!(as_brdb_u8 @ u8);
+try_from_impl!(as_brdb_u16 @ u16);
+try_from_impl!(as_brdb_u32 @ u32);
+try_from_impl!(as_brdb_u64 @ u64);
+try_from_impl!(as_brdb_i8 @ i8);
+try_from_impl!(as_brdb_i16 @ i16);
+try_from_impl!(as_brdb_i32 @ i32);
+try_from_impl!(as_brdb_i64 @ i64);
+try_from_impl!(as_brdb_f32 @ f32);
+try_from_impl!(as_brdb_f64 @ f64);

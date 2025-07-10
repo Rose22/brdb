@@ -1,8 +1,10 @@
 # BRDB
 
-This repo provides interfaces for reading and writing [Brickadia](https://brickadia.com/)'s World files, which are stored in the `.brdb` format.
+This repo provides interfaces for reading and writing [Brickadia](https://brickadia.com/)'s World files, which are stored in the `.brdb` and `.brz` formats.
 
 It also contains code for assisting with parsing msgpack-schema files as defined in [Zeblote's Brickadia msgpac-schema Gist](https://gist.github.com/Zeblote/053d54cc820df3bccad57df676202895). Some undocumented changes to this format are required to fully read/write `.brdb` files.
+
+The `.brz` format is described in [Zeblote's Brickadia brz Gist](https://gist.github.com/Zeblote/0fc682b9df1a3e82942b613ab70d8a04).
 
 ## Implementations
 
@@ -12,6 +14,7 @@ It also contains code for assisting with parsing msgpack-schema files as defined
 ## Format
 
 - TODO: describe file tree structure
+- TODO: describe differences between `.brdb` and `.brz`
 - TODO: describe revision mechanism and dates
 - TODO: describe blobs, compression, and hashing
 - TODO: describe msgpack-schema format

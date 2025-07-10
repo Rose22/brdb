@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     assets::entities::{DYNAMIC_GRID, dynamic_grid_entity},
+    errors::BrdbSchemaError,
     schema::{
-        BrdbSchemaGlobalData,
+        BrdbSchemaGlobalData, BrdbValue,
         as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
     },
     wrapper::{BString, BitFlags, BrdbComponent, ChunkIndex, Color, Quat4f, Vector3f},
@@ -60,7 +61,7 @@ impl AsBrdbValue for EntityTypeCounter {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "TypeIndex" => Ok(&self.type_index),
             "NumEntities" => Ok(&self.num_entities),
@@ -86,9 +87,9 @@ impl EntityColor {
     }
 }
 
-impl TryFrom<&crate::schema::BrdbValue> for EntityColor {
-    type Error = crate::errors::BrdbSchemaError;
-    fn try_from(value: &crate::schema::BrdbValue) -> Result<Self, Self::Error> {
+impl TryFrom<&BrdbValue> for EntityColor {
+    type Error = BrdbSchemaError;
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
         let r = value.prop("R")?.as_brdb_u8()?;
         let g = value.prop("G")?.as_brdb_u8()?;
         let b = value.prop("B")?.as_brdb_u8()?;
@@ -109,7 +110,7 @@ impl AsBrdbValue for EntityColor {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "R" => Ok(&self.r),
             "G" => Ok(&self.g),
@@ -141,10 +142,10 @@ pub struct EntityColors(
     pub EntityColor,
     pub EntityColor,
 );
-impl TryFrom<&crate::schema::BrdbValue> for EntityColors {
-    type Error = crate::errors::BrdbSchemaError;
+impl TryFrom<&BrdbValue> for EntityColors {
+    type Error = BrdbSchemaError;
 
-    fn try_from(value: &crate::schema::BrdbValue) -> Result<Self, Self::Error> {
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
         Ok(Self(
             value.prop("Color0")?.try_into()?,
             value.prop("Color1")?.try_into()?,
@@ -163,7 +164,7 @@ impl AsBrdbValue for EntityColors {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "Color0" => Ok(&self.0),
             "Color1" => Ok(&self.1),
@@ -250,7 +251,7 @@ impl AsBrdbValue for EntityChunkSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "WeldParentFlags" => Ok(&self.weld_parent_flags),
             "PhysicsLockedFlags" => Ok(&self.physics_locked_flags),
@@ -264,8 +265,7 @@ impl AsBrdbValue for EntityChunkSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError>
-    {
+    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "TypeCounters" => Ok(self.type_counters.as_brdb_iter()),
             "PersistentIndices" => Ok(self.persistent_indices.as_brdb_iter()),
@@ -303,7 +303,7 @@ impl AsBrdbValue for EntityChunkIndexSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "NextPersistentIndex" => Ok(&self.next_persistent_index),
             _ => unreachable!(),
@@ -315,7 +315,7 @@ impl AsBrdbValue for EntityChunkIndexSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<BrdbArrayIter, crate::errors::BrdbSchemaError> {
+    ) -> Result<BrdbArrayIter, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "Chunk3DIndices" => Ok(self.chunk_3d_indices.as_brdb_iter()),
             "NumEntities" => Ok(self.num_entities.as_brdb_iter()),

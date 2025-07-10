@@ -1,4 +1,12 @@
-use crate::schema::as_brdb::{AsBrdbIter, AsBrdbValue};
+use uuid::Uuid;
+
+use crate::{
+    BrdbSchemaError,
+    schema::{
+        BrdbStruct, BrdbValue,
+        as_brdb::{AsBrdbIter, AsBrdbValue},
+    },
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Guid {
@@ -7,6 +15,60 @@ pub struct Guid {
     pub c: u32,
     pub d: u32,
 }
+
+impl From<Guid> for Uuid {
+    fn from(value: Guid) -> Self {
+        value.uuid()
+    }
+}
+impl From<Uuid> for Guid {
+    fn from(value: Uuid) -> Self {
+        Guid::from_uuid(value)
+    }
+}
+
+impl Guid {
+    pub fn uuid(self) -> Uuid {
+        Uuid::from_u128(
+            (self.a as u128) << 96
+                | (self.b as u128) << 64
+                | (self.c as u128) << 32
+                | (self.d as u128),
+        )
+    }
+
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        let v = uuid.as_u128();
+        Self {
+            a: (v >> 96) as u32,
+            b: (v >> 64) as u32,
+            c: (v >> 32) as u32,
+            d: v as u32,
+        }
+    }
+}
+
+impl TryFrom<&BrdbValue> for Guid {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        let a = value.prop("A")?.as_brdb_u32()?;
+        let b = value.prop("B")?.as_brdb_u32()?;
+        let c = value.prop("C")?.as_brdb_u32()?;
+        let d = value.prop("D")?.as_brdb_u32()?;
+        Ok(Self { a, b, c, d })
+    }
+}
+
+impl TryFrom<&BrdbValue> for Uuid {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        let guid: Guid = value.try_into()?;
+        Ok(guid.uuid())
+    }
+}
+
 impl Default for Guid {
     fn default() -> Self {
         Self {
@@ -59,6 +121,31 @@ pub struct OwnerTableSoA {
     pub brick_counts: Vec<u32>,
     pub component_counts: Vec<u32>,
     pub wire_counts: Vec<u32>,
+}
+
+impl TryFrom<&BrdbValue> for OwnerTableSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            user_ids: value.prop("UserIds")?.try_into()?,
+            user_names: value.prop("UserNames")?.try_into()?,
+            display_names: value.prop("DisplayNames")?.try_into()?,
+            entity_counts: value.prop("EntityCounts")?.try_into()?,
+            brick_counts: value.prop("BrickCounts")?.try_into()?,
+            component_counts: value.prop("ComponentCounts")?.try_into()?,
+            wire_counts: value.prop("WireCounts")?.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<BrdbStruct> for OwnerTableSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: BrdbStruct) -> Result<Self, Self::Error> {
+        let value = BrdbValue::Struct(Box::new(value));
+        Self::try_from(&value)
+    }
 }
 
 impl Default for OwnerTableSoA {
@@ -128,8 +215,7 @@ impl AsBrdbValue for OwnerTableSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError>
-    {
+    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "UserIds" => Ok(self.user_ids.as_brdb_iter()),
             "UserNames" => Ok(self.user_names.as_brdb_iter()),

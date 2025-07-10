@@ -1,4 +1,4 @@
-use brdb::{Brdb, Brick, Entity, World};
+use brdb::{BrFsReader, Brdb, Brick, Entity, IntoReader, World};
 use std::path::PathBuf;
 
 /// Writes a world a brick on a floating brick grid to example_entity.brdb

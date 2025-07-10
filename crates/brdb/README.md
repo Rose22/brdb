@@ -4,6 +4,8 @@ This library provides an interface for reading and writing [Brickadia](https://b
 
 It also contains code for assisting with parsing msgpack-schema files as defined in [Zeblote's Brickadia msgpac-schema Gist](https://gist.github.com/Zeblote/053d54cc820df3bccad57df676202895). Some undocumented changes to this format are required to fully read/write `.brdb` files.
 
+The `.brz` format is described in [Zeblote's Brickadia brz Gist](https://gist.github.com/Zeblote/0fc682b9df1a3e82942b613ab70d8a04).
+
 ## API
 
 See [Examples](./examples/) to see how to read/write worlds.

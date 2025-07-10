@@ -3,33 +3,36 @@ use std::fmt::Display;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum BrdbError {
+pub enum BrError {
+    #[error("{0}: {1}")]
+    Wrapped(String, Box<Self>),
     #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
-    #[error("required table is missing: {0}")]
-    MissingTable(&'static str),
-    #[error(transparent)]
-    Fs(#[from] BrdbFsError),
+    Fs(#[from] BrFsError),
     #[error(transparent)]
     Schema(#[from] BrdbSchemaError),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-    #[error("{0}: {1}")]
-    Wrapped(String, Box<BrdbError>),
     #[error(transparent)]
     World(#[from] BrdbWorldError),
+    #[cfg(feature = "brdb")]
+    #[error(transparent)]
+    Brdb(#[from] crate::BrdbError),
+    #[cfg(feature = "brz")]
+    #[error(transparent)]
+    Brz(#[from] crate::BrzError),
 }
 
-impl BrdbError {
+impl BrError {
     pub fn wrap(self, label: impl Display) -> Self {
         Self::Wrapped(label.to_string(), Box::new(self))
     }
 }
 
 #[derive(Debug, Error)]
-pub enum BrdbFsError {
+pub enum BrFsError {
     #[error("{0}: {1}")]
-    Wrapped(String, Box<BrdbFsError>),
+    Wrapped(String, Box<Self>),
+    #[cfg(feature = "brdb")]
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error("failed to decompress data: {0}")]
@@ -62,23 +65,23 @@ pub enum BrdbFsError {
     DuplicateName(String),
     #[error("invalid path component {0}")]
     InvalidPathComponent(String),
+    #[error("missing content for {0}")]
+    MissingContent(String),
 }
 
-impl BrdbFsError {
+impl BrFsError {
     pub fn wrap(self, label: impl Display) -> Self {
         Self::Wrapped(label.to_string(), Box::new(self))
     }
 }
 
-impl BrdbFsError {
+impl BrFsError {
     pub fn prepend(self, path: impl Display) -> Self {
         match self {
-            BrdbFsError::ExpectedFile(p) => BrdbFsError::ExpectedFile(format!("{path}/{p}")),
-            BrdbFsError::ExpectedDirectory(p) => {
-                BrdbFsError::ExpectedDirectory(format!("{path}/{p}"))
-            }
-            BrdbFsError::NotFound(p) => BrdbFsError::NotFound(format!("{path}/{p}")),
-            BrdbFsError::NotADirectory(p) => BrdbFsError::NotADirectory(format!("{path}/{p}")),
+            BrFsError::ExpectedFile(p) => BrFsError::ExpectedFile(format!("{path}/{p}")),
+            BrFsError::ExpectedDirectory(p) => BrFsError::ExpectedDirectory(format!("{path}/{p}")),
+            BrFsError::NotFound(p) => BrFsError::NotFound(format!("{path}/{p}")),
+            BrFsError::NotADirectory(p) => BrFsError::NotADirectory(format!("{path}/{p}")),
             other => other,
         }
     }

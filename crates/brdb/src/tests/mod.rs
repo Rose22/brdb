@@ -1,0 +1,291 @@
+use std::path::PathBuf;
+
+use crate::{
+    BrFsReader, Brdb, IntoReader, assets,
+    errors::BrError,
+    schema::{ReadBrdbSchema, as_brdb::AsBrdbValue},
+    tables::BrBlob,
+    wrapper::{Brick, Entity, World, lookup_entity_struct_name, schemas::ENTITY_CHUNK_SOA},
+};
+
+#[test]
+fn test_memory_db() -> Result<(), Box<dyn std::error::Error>> {
+    // Ensures the memory db can be created without errors
+    let db = Brdb::new_memory()?;
+
+    // Insert a blob, folder, and file
+    let blob_id = db.insert_blob(vec![0], BrBlob::hash(&[0]), None)?;
+    let folder_id = db.insert_folder("test_folder", None, 0)?;
+    let file_id = db.insert_file("test", Some(folder_id), blob_id, 0)?;
+
+    assert_eq!(
+        db.get_fs()?.render(),
+        "   |-- test_folder/\n   |   |-- test\n"
+    );
+
+    // Ensure the file can be read
+    assert_eq!(db.read_file("test_folder/test")?, vec![0]);
+
+    // Delete the file
+    db.delete_file(file_id, 1)?;
+    assert_eq!(db.get_fs()?.render(), "   |-- test_folder/\n");
+    assert!(db.read_file("test_folder/test").is_err());
+
+    // Delete the folder
+    db.delete_folder(folder_id, 1)?;
+    assert_eq!(db.get_fs()?.render(), "");
+
+    // Ensure the blob can still be found
+    assert!(db.find_blob(blob_id).is_ok());
+    // Ensure the blob can be found by hash
+    assert!(db.find_blob_by_hash(1, &BrBlob::hash(&[0])).is_ok());
+    Ok(())
+}
+
+#[test]
+fn test_memory_save() -> Result<(), Box<dyn std::error::Error>> {
+    // Ensures the memory db can be created without errors
+    let db = Brdb::new_memory()?.into_reader();
+    let mut world = World::new();
+    world.bricks.push(Brick {
+        position: (0, 0, 3).into(),
+        color: (255, 0, 0).into(),
+        ..Default::default()
+    });
+    db.save("test world", &world)?;
+
+    let mps = db.brick_chunk_soa(1, (0, 0, 0).into())?;
+    let color = mps.prop("ColorsAndAlphas")?.index(0)?.unwrap();
+    assert_eq!(color.prop("R")?.as_brdb_u8()?, 255);
+    assert_eq!(color.prop("G")?.as_brdb_u8()?, 0);
+    assert_eq!(color.prop("B")?.as_brdb_u8()?, 0);
+    assert_eq!(color.prop("A")?.as_brdb_u8()?, 5);
+
+    Ok(())
+}
+
+/// Writes a world with one brick to test.brdb
+#[test]
+fn test_write_save() -> Result<(), Box<dyn std::error::Error>> {
+    let path = PathBuf::from("./test.brdb");
+
+    // Ensures the memory db can be created without errors
+    let db = Brdb::new(&path)?.into_reader();
+    let mut world = World::new();
+    world.meta.bundle.description = "Test World".to_string();
+    world.bricks.push(Brick {
+        position: (0, 0, 6).into(),
+        color: (255, 0, 0).into(),
+        ..Default::default()
+    });
+    db.save("test world", &world)?;
+
+    println!("{}", db.get_fs()?.render());
+
+    let soa = db.brick_chunk_soa(1, (0, 0, 0).into())?;
+    let color = soa.prop("ColorsAndAlphas")?.index(0)?.unwrap();
+    assert_eq!(color.prop("R")?.as_brdb_u8()?, 255);
+    assert_eq!(color.prop("G")?.as_brdb_u8()?, 0);
+    assert_eq!(color.prop("B")?.as_brdb_u8()?, 0);
+    assert_eq!(color.prop("A")?.as_brdb_u8()?, 5);
+
+    Ok(())
+}
+
+/// Writes a world with two bricks and a wire connection to wire_test.brdb
+#[test]
+fn test_write_wire_save() -> Result<(), Box<dyn std::error::Error>> {
+    let path = PathBuf::from("./wire_test.brdb");
+
+    let db = if path.exists() {
+        Brdb::open(path)?
+    } else {
+        Brdb::create(path)?
+    };
+
+    let mut world = World::new();
+    world.meta.bundle.description = "Test World".to_string();
+
+    let (a, a_id) = Brick {
+        position: (0, 0, 1).into(),
+        color: (255, 0, 0).into(),
+        asset: assets::bricks::B_REROUTE,
+        ..Default::default()
+    }
+    .with_component(assets::components::Rerouter)
+    .with_id_split();
+    let (b, b_id) = Brick {
+        position: (15, 0, 1).into(),
+        color: (255, 0, 0).into(),
+        asset: assets::components::LogicGate::BoolNot.brick(),
+        ..Default::default()
+    }
+    .with_component(assets::components::LogicGate::BoolNot.component())
+    .with_id_split();
+
+    world.add_bricks([a, b]);
+    world.add_wire_connection(
+        assets::components::LogicGate::BoolNot.output_of(b_id),
+        assets::components::Rerouter::input_of(a_id),
+    );
+
+    db.save("test world", &world)?;
+
+    println!("{}", db.get_fs()?.render());
+
+    Ok(())
+}
+
+/// Writes a world with one brick to test.brdb
+#[test]
+fn test_write_entity_save() -> Result<(), Box<dyn std::error::Error>> {
+    let path = PathBuf::from("./entity_test.brdb");
+
+    let db = if path.exists() {
+        Brdb::open(path)?
+    } else {
+        Brdb::create(path)?
+    };
+
+    let mut world = World::new();
+    world.meta.bundle.description = "Test World".to_string();
+    world.add_brick_grid(
+        Entity {
+            frozen: true,
+            location: (0.0, 0.0, 40.0).into(),
+            ..Default::default()
+        },
+        [Brick {
+            position: (0, 0, 3).into(),
+            color: (0, 255, 0).into(),
+            ..Default::default()
+        }],
+    );
+
+    db.save("test world", &world)?;
+
+    println!("{}", db.get_fs()?.render());
+
+    Ok(())
+}
+
+/// Reads the world generated by `test_write_save` and prints the data.
+#[test]
+fn test_read_test() -> Result<(), BrError> {
+    let path = PathBuf::from("./test.brdb");
+    if !path.exists() {
+        return Ok(());
+    }
+    let db = Brdb::open(path)?.into_reader();
+
+    println!("{}", db.get_fs()?.render());
+
+    let data = db.brick_chunk_soa(1, (0, 0, 0).into())?;
+    println!("data: {data}");
+
+    Ok(())
+}
+
+/// Read all the components and brick assets
+#[test]
+fn test_read_all_components() -> Result<(), BrError> {
+    let path = PathBuf::from("../../edgea.brdb");
+    if !path.exists() {
+        return Ok(());
+    }
+    let db = Brdb::open(path)?.into_reader();
+
+    println!("{}", db.get_fs()?.render());
+
+    let data = db.global_data()?;
+    println!("Basic Brick assets: {:?}", data.basic_brick_asset_names);
+    println!("wire ports: {:?}", data.component_wire_port_names);
+    println!("component types: {:?}", data.component_type_names);
+    println!("component structs: {:?}", data.component_data_struct_names);
+    println!("component schemas: {}", db.components_schema()?);
+
+    let chunks = db.brick_chunk_index(1)?;
+    println!("Brick chunks: {chunks:?}");
+    for chunk in chunks {
+        let soa = db.brick_chunk_soa(1, chunk.index)?;
+        println!("Brick soa: {soa}");
+        if chunk.num_components > 0 {
+            let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
+            println!("Components soa: {soa}");
+            for c in components {
+                println!("Component: {c}");
+            }
+        }
+        if chunk.num_wires > 0 {
+            let soa = db.wire_chunk_soa(1, chunk.index)?;
+            println!("Wires soa: {soa}");
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_debugging() -> Result<(), BrError> {
+    let path = PathBuf::from("./entity.brdb");
+    if !path.exists() {
+        return Ok(());
+    }
+    let db = Brdb::open(path)?.into_reader();
+
+    let global_data = db.read_global_data()?;
+
+    println!("{}", db.get_fs()?.render());
+
+    println!(
+        "Basic Brick assets: {:?}",
+        global_data.basic_brick_asset_names
+    );
+    println!(
+        "Proc Brick assets: {:?}",
+        global_data.procedural_brick_asset_names
+    );
+    println!("Entity assets: {:?}", global_data.entity_type_names);
+
+    let bricks = db.brick_chunk_soa(3, (-1, -1, -1).into())?;
+    println!("Bricks: {bricks}");
+
+    let entity_schema = db.entities_schema()?;
+
+    for chunk in db.entity_chunk_index()? {
+        let buf = db.read_file(format!("World/0/Entities/Chunks/{chunk}.mps"))?;
+        let buf = &mut buf.as_slice();
+
+        let entities = buf.read_brdb(&entity_schema, ENTITY_CHUNK_SOA)?;
+        println!("entities: {}", entities.display(&entity_schema));
+
+        let type_counters = entities.prop("TypeCounters")?.as_array()?;
+        for counter in type_counters {
+            let type_idx = counter.prop("TypeIndex")?.as_brdb_u32()?;
+            let num_instances = counter.prop("NumEntities")?.as_brdb_u32()?;
+            let type_name = global_data
+                .entity_type_names
+                .get_index(type_idx as usize)
+                .cloned()
+                .unwrap_or("illegal".to_string());
+            let struct_name = lookup_entity_struct_name(&type_name)
+                .unwrap_or("unknown")
+                .to_string();
+
+            println!(
+                "Component type {type_name}/{struct_name} (index {type_idx}) has {num_instances} instances"
+            );
+
+            if struct_name == "None" {
+                continue;
+            }
+
+            for _ in 0..num_instances {
+                let component = buf.read_brdb(&entity_schema, &struct_name)?;
+                println!("Component: {}", component.display(&entity_schema));
+            }
+        }
+    }
+
+    Ok(())
+}

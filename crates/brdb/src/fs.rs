@@ -1,38 +1,37 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    fmt::Display,
-};
+use std::fmt::Display;
 
 use indexmap::IndexMap;
 
 use crate::{
-    Brdb,
-    errors::BrdbFsError,
-    pending::BrdbPendingFs,
-    tables::{BrdbBlob, BrdbFile, BrdbFolder},
+    BrFsReader,
+    errors::BrFsError,
+    pending::BrPendingFs,
+    tables::{BrBlob, BrFile, BrFolder},
 };
 
 #[derive(Debug, Clone)]
-pub enum BrdbFs {
-    Root(IndexMap<String, BrdbFs>),
-    Folder(BrdbFolder, IndexMap<String, BrdbFs>),
-    File(BrdbFile),
+pub enum BrFs {
+    Root(IndexMap<String, BrFs>),
+    Folder(BrFolder, IndexMap<String, BrFs>),
+    File(BrFile),
 }
 
+#[cfg(feature = "brdb")]
 pub(crate) fn now() -> i64 {
     // Use a high-resolution timer to get the current time in milliseconds
     let now = std::time::SystemTime::now();
     now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
 }
 
-impl BrdbFs {
+impl BrFs {
+    #[cfg(feature = "brdb")]
     pub fn write_pending(
         &self,
         description: &str,
-        db: &Brdb,
-        pending: BrdbPendingFs,
+        db: &crate::Brdb,
+        pending: BrPendingFs,
         zstd_level: Option<i32>,
-    ) -> Result<(), BrdbFsError> {
+    ) -> Result<(), crate::BrdbError> {
         let created_at = now();
         let tx = db.conn.unchecked_transaction()?;
         // Create the revision
@@ -45,26 +44,27 @@ impl BrdbFs {
         Ok(())
     }
 
+    #[cfg(feature = "brdb")]
     fn write_pending_internal(
         &self,
-        db: &Brdb,
-        pending: BrdbPendingFs,
+        db: &crate::Brdb,
+        pending: BrPendingFs,
         created_at: i64,
         zstd_level: Option<i32>,
-    ) -> Result<(), BrdbFsError> {
+    ) -> Result<(), crate::BrdbError> {
         let (parent, children, changes) = match (self, pending) {
             // Empty folder is noop
-            (BrdbFs::Folder(_, _), BrdbPendingFs::Folder(None)) => return Ok(()),
+            (BrFs::Folder(_, _), BrPendingFs::Folder(None)) => return Ok(()),
             // Empty file is noop
-            (BrdbFs::File(_), BrdbPendingFs::File(None)) => return Ok(()),
+            (BrFs::File(_), BrPendingFs::File(None)) => return Ok(()),
             // Directory handling
-            (BrdbFs::Root(children), BrdbPendingFs::Root(files)) => (None, children, files),
-            (BrdbFs::Folder(folder, children), BrdbPendingFs::Folder(Some(files))) => {
+            (BrFs::Root(children), BrPendingFs::Root(files)) => (None, children, files),
+            (BrFs::Folder(folder, children), BrPendingFs::Folder(Some(files))) => {
                 (Some(folder.folder_id), children, files)
             }
             // Existing file handling
-            (BrdbFs::File(file), BrdbPendingFs::File(Some(content))) => {
-                let hash = BrdbBlob::hash(&content);
+            (BrFs::File(file), BrPendingFs::File(Some(content))) => {
+                let hash = BrBlob::hash(&content);
 
                 // Check if this blob already exists
                 if let Some(blob) = db.find_blob_by_hash(content.len(), &hash)? {
@@ -83,14 +83,14 @@ impl BrdbFs {
                 db.insert_file(&file.name, file.parent_id, content_id, created_at)?;
                 return Ok(());
             }
-            (l, r) => return Err(BrdbFsError::InvalidStructure(l.render(), r.to_string())),
+            (l, r) => return Err(BrFsError::InvalidStructure(l.render(), r.to_string()).into()),
         };
 
-        let mut seen = HashSet::new();
+        let mut seen = std::collections::HashSet::new();
 
         for (name, change) in changes {
             if seen.contains(&name) {
-                return Err(BrdbFsError::DuplicateName(name.clone()));
+                return Err(BrFsError::DuplicateName(name.clone()).into());
             }
             seen.insert(name.clone());
 
@@ -110,24 +110,24 @@ impl BrdbFs {
         let mut queue = children
             .iter()
             .filter_map(|(name, child)| (!seen.contains(name)).then_some(child))
-            .collect::<VecDeque<_>>();
+            .collect::<std::collections::VecDeque<_>>();
 
         // All descendants of non-visited children must be deleted.
         while let Some(child) = queue.pop_front() {
             match child {
-                BrdbFs::Root(children) => {
+                BrFs::Root(children) => {
                     for (_, child) in children {
                         queue.push_back(child);
                     }
                 }
-                BrdbFs::Folder(folder, children) => {
+                BrFs::Folder(folder, children) => {
                     db.delete_folder(folder.folder_id, created_at)
                         .map_err(|e| e.wrap(format!("Delete Folder {}", folder.name)))?;
                     for (_, child) in children {
                         queue.push_back(child);
                     }
                 }
-                BrdbFs::File(file) => {
+                BrFs::File(file) => {
                     db.delete_file(file.file_id, created_at)
                         .map_err(|e| e.wrap(format!("Delete File {}", file.name)))?;
                 }
@@ -137,28 +137,30 @@ impl BrdbFs {
         Ok(())
     }
 
+    #[cfg(feature = "brdb")]
     /// Insert a pending filesystem entry into the database without any
     /// existing structure.
     fn insert_pending(
-        db: &Brdb,
+        db: &crate::Brdb,
         name: &str,
         parent: Option<i64>,
-        pending: BrdbPendingFs,
+        pending: BrPendingFs,
         created_at: i64,
         zstd_level: Option<i32>,
-    ) -> Result<(), BrdbFsError> {
+    ) -> Result<(), crate::BrdbError> {
         match pending {
-            BrdbPendingFs::Root(files) => {
-                return Err(BrdbFsError::InvalidStructure(
+            BrPendingFs::Root(files) => {
+                return Err(BrFsError::InvalidStructure(
                     "root".to_string(),
-                    BrdbPendingFs::Root(files).to_string(),
-                ));
+                    BrPendingFs::Root(files).to_string(),
+                )
+                .into());
             }
             // Empty folder is a noop
-            BrdbPendingFs::Folder(None) => {}
+            BrPendingFs::Folder(None) => {}
             // Emtpy file is a noop
-            BrdbPendingFs::File(None) => {}
-            BrdbPendingFs::Folder(Some(items)) => {
+            BrPendingFs::File(None) => {}
+            BrPendingFs::Folder(Some(items)) => {
                 // Create this folder, then insert its children
                 let folder_id = db.insert_folder(&name, parent, now())?;
                 for (name, child) in items {
@@ -167,8 +169,8 @@ impl BrdbFs {
                         .map_err(|e| e.wrap(name))?;
                 }
             }
-            BrdbPendingFs::File(Some(content)) => {
-                let hash = BrdbBlob::hash(&content);
+            BrPendingFs::File(Some(content)) => {
+                let hash = BrBlob::hash(&content);
                 // Check if this blob already exists
                 let content_id = if let Some(blob) = db.find_blob_by_hash(content.len(), &hash)? {
                     // If the blob already exists, reuse it
@@ -187,49 +189,62 @@ impl BrdbFs {
     }
 
     pub fn is_root(&self) -> bool {
-        matches!(self, BrdbFs::Root(_))
+        matches!(self, BrFs::Root(_))
     }
 
     pub fn is_folder(&self) -> bool {
-        matches!(self, BrdbFs::Folder(_, _))
+        matches!(self, BrFs::Folder(_, _))
     }
 
     pub fn is_file(&self) -> bool {
-        matches!(self, BrdbFs::File(_))
+        matches!(self, BrFs::File(_))
     }
 
-    /// Convert this filesystem to a pending filesystem with unchanged files.
-    pub fn to_pending(&self) -> BrdbPendingFs {
-        match self {
-            BrdbFs::Root(children) => BrdbPendingFs::Root(
+    /// Convert this filesystem to a pending filesystem with all files present
+    pub fn to_pending(&self, reader: &impl BrFsReader) -> Result<BrPendingFs, BrFsError> {
+        Self::to_pending_internal(&self, Some(reader))
+    }
+
+    /// Convert this filesystem to a pending filesystem all files in Patch mode (None for unchanged)
+    pub fn to_pending_patch(&self) -> Result<BrPendingFs, BrFsError> {
+        Self::to_pending_internal(&self, None::<&()>)
+    }
+
+    /// Convert this filesystem to a pending filesystem
+    fn to_pending_internal(
+        &self,
+        reader: Option<&impl BrFsReader>,
+    ) -> Result<BrPendingFs, BrFsError> {
+        Ok(match self {
+            BrFs::Root(children) => BrPendingFs::Root(
                 children
                     .iter()
-                    .map(|(name, child)| (name.to_owned(), child.to_pending()))
-                    .collect(),
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending_internal(reader)?)))
+                    .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             ),
-            BrdbFs::Folder(_folder, children) => BrdbPendingFs::Folder(Some(
+            BrFs::Folder(_folder, children) => BrPendingFs::Folder(Some(
                 children
                     .iter()
-                    .map(|(name, child)| (name.to_owned(), child.to_pending()))
-                    .collect(),
+                    .map(|(name, child)| Ok((name.to_owned(), child.to_pending_internal(reader)?)))
+                    .collect::<Result<Vec<(String, BrPendingFs)>, BrFsError>>()?,
             )),
-            BrdbFs::File(_) => BrdbPendingFs::File(None),
-        }
+            BrFs::File(f) => BrPendingFs::File(reader.map(|r| f.read(r)).transpose()?),
+        })
     }
 
     /// Navigate a brdb filesystem to a specific path.
-    pub fn cd(&self, path: impl Display) -> Result<BrdbFs, BrdbFsError> {
+    pub fn cd(&self, path: impl Display) -> Result<BrFs, BrFsError> {
         let path = path.to_string();
         if self.is_root() && path.starts_with("/") {
-            return Err(BrdbFsError::AbsolutePathNotAllowed);
+            return Err(BrFsError::AbsolutePathNotAllowed);
         }
 
         let is_last = !path.contains("/");
 
         // Recursively resolve the path
         match self {
-            BrdbFs::Root(_) | BrdbFs::Folder(_, _) if is_last => Ok(self.clone()),
-            BrdbFs::Root(children) | BrdbFs::Folder(_, children) => {
+            BrFs::Root(_) | BrFs::Folder(_, _) if is_last => Ok(self.clone()),
+            BrFs::Root(children) | BrFs::Folder(_, children) => {
                 // Unwrap safety - components.count() > 0
                 let (first, _) = path.split_once("/").unwrap();
                 if let Some(child) = children.get(first) {
@@ -237,58 +252,58 @@ impl BrdbFs {
                         .cd(path.strip_prefix(first).unwrap())
                         .map_err(|e| e.prepend(self.name()))
                 } else {
-                    Err(BrdbFsError::NotFound(format!("{}/{first}", self.name(),)))
+                    Err(BrFsError::NotFound(format!("{}/{first}", self.name(),)))
                 }
             }
             // Cannot cd in a file
-            BrdbFs::File(_) if !is_last => Err(BrdbFsError::ExpectedDirectory(self.name())),
-            BrdbFs::File(_) => Ok(self.clone()),
+            BrFs::File(_) if !is_last => Err(BrFsError::ExpectedDirectory(self.name())),
+            BrFs::File(_) => Ok(self.clone()),
         }
     }
 
     /// Read the content of a file in the brdb filesystem.
-    pub fn read_blob(&self, db: &Brdb) -> Result<BrdbBlob, BrdbFsError> {
-        let BrdbFs::File(file) = self else {
-            return Err(BrdbFsError::ExpectedFile(self.name().into()));
+    pub fn read_blob(&self, db: &impl BrFsReader) -> Result<BrBlob, BrFsError> {
+        let BrFs::File(file) = self else {
+            return Err(BrFsError::ExpectedFile(self.name().into()));
         };
         let Some(content_id) = file.content_id else {
-            return Err(BrdbFsError::ExpectedFileContent(file.name.as_str().into()));
+            return Err(BrFsError::ExpectedFileContent(file.name.as_str().into()));
         };
         db.find_blob(content_id)
     }
 
-    pub fn read(&self, db: &Brdb) -> Result<Vec<u8>, BrdbFsError> {
-        let BrdbFs::File(file) = self else {
-            return Err(BrdbFsError::ExpectedFile(self.name().into()));
+    pub fn read(&self, db: &impl BrFsReader) -> Result<Vec<u8>, BrFsError> {
+        let BrFs::File(file) = self else {
+            return Err(BrFsError::ExpectedFile(self.name().into()));
         };
         file.read(db)
     }
 
     pub fn name(&self) -> String {
         match self {
-            BrdbFs::Root(_) => "".to_string(),
-            BrdbFs::Folder(folder, _) => folder.name.clone(),
-            BrdbFs::File(file) => file.name.clone(),
+            BrFs::Root(_) => "".to_string(),
+            BrFs::Folder(folder, _) => folder.name.clone(),
+            BrFs::File(file) => file.name.clone(),
         }
     }
 
-    pub fn for_each(&self, func: &mut impl FnMut(&BrdbFs)) {
+    pub fn for_each(&self, func: &mut impl FnMut(&BrFs)) {
         func(self);
         match self {
             // Invoke for_each for each of the entries in each folder
-            BrdbFs::Root(dir) | BrdbFs::Folder(_, dir) => {
+            BrFs::Root(dir) | BrFs::Folder(_, dir) => {
                 for fs in dir.values() {
                     fs.for_each(func)
                 }
             }
-            BrdbFs::File(_) => {}
+            BrFs::File(_) => {}
         }
     }
 
-    pub fn filter_map_file<T>(&self, mut func: impl FnMut(&BrdbFile) -> Option<T>) -> Vec<T> {
+    pub fn filter_map_file<T>(&self, mut func: impl FnMut(&BrFile) -> Option<T>) -> Vec<T> {
         let mut res = vec![];
         self.for_each(&mut |fs| match fs {
-            BrdbFs::File(file) => {
+            BrFs::File(file) => {
                 if let Some(r) = func(file) {
                     res.push(r);
                 }
@@ -305,14 +320,14 @@ impl BrdbFs {
     fn render_inner(&self, depth: usize) -> String {
         let pad = "   |".repeat(depth);
         match self {
-            BrdbFs::Root(children) => {
+            BrFs::Root(children) => {
                 let mut output = String::new();
                 for child in children.values() {
                     output.push_str(&child.render_inner(depth + 1));
                 }
                 output
             }
-            BrdbFs::Folder(dir, children) => {
+            BrFs::Folder(dir, children) => {
                 let mut output = String::new();
                 output.push_str(&format!("{pad}-- {}/\n", dir.name));
                 for child in children.values() {
@@ -320,7 +335,7 @@ impl BrdbFs {
                 }
                 output
             }
-            BrdbFs::File(brdb_file) => {
+            BrFs::File(brdb_file) => {
                 let file_path = if depth == 0 {
                     brdb_file.name.clone()
                 } else {
@@ -332,11 +347,11 @@ impl BrdbFs {
     }
 }
 
-impl BrdbFile {
+impl BrFile {
     /// Read (and decompress) the content of a blob in the brdb filesystem.
-    pub fn read(&self, db: &Brdb) -> Result<Vec<u8>, BrdbFsError> {
+    pub fn read(&self, db: &impl BrFsReader) -> Result<Vec<u8>, BrFsError> {
         let Some(content_id) = self.content_id else {
-            return Err(BrdbFsError::ExpectedFileContent(self.name.as_str().into()).into());
+            return Err(BrFsError::ExpectedFileContent(self.name.as_str().into()).into());
         };
         db.find_blob(content_id)?.read()
     }

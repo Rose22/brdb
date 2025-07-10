@@ -1,9 +1,9 @@
-use brdb::{AsBrdbValue, BrFsReader, Brdb, Brick, IntoReader, World};
+use brdb::{AsBrdbValue, BrFsReader, Brick, Brz, IntoReader, World};
 use std::path::PathBuf;
 
 /// Writes a world with one brick to example_brick
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = PathBuf::from("./example_brick.brdb");
+    let path = PathBuf::from("./example_brick.brz");
 
     let mut world = World::new();
     world.meta.bundle.description = "Example World".to_string();
@@ -13,11 +13,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     });
 
-    world.write_brdb(&path)?;
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
+    world.write_brz(&path)?;
 
-    let db = Brdb::new(&path)?.into_reader();
+    let db = Brz::new(&path)?.into_reader();
 
-    println!("file structure: {}", db.get_fs()?.render());
+    println!("{}", db.get_fs()?.render());
 
     let soa = db.brick_chunk_soa(1, (0, 0, 0).into())?;
     let color = soa.prop("ColorsAndAlphas")?.index(0)?.unwrap();
