@@ -60,7 +60,7 @@ pub struct BrzArchiveHeader {
     pub index_hash: [u8; 32],
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct BrzIndexData {
     pub num_folders: i32,
     pub num_files: i32,
@@ -248,28 +248,26 @@ impl Brz {
         let mut index_data = self.index_data.to_vec()?;
         let index_size_uncompressed = index_data.len() as i32;
         #[allow(unused)]
-        let mut index_size_compressed = 0;
+        let mut index_size_compressed = index_size_uncompressed;
         let mut index_method = CompressionMethod::None;
         let index_hash = BrBlob::hash(&index_data);
 
         if let Some(level) = zstd_level {
-            index_size_compressed = index_data.len() as i32;
             let compressed_data = crate::compression::compress(&index_data, level)?;
             // Only use the compressed data if it improves file size
-            if index_size_compressed < index_size_uncompressed {
+            if (index_data.len() as i32) < index_size_uncompressed {
+                index_size_compressed = compressed_data.len() as i32;
                 index_method = CompressionMethod::GenericZstd;
                 index_data = compressed_data;
             }
-        } else {
-            index_size_compressed = 0;
         };
 
         BrzArchiveHeader {
             version: FormatVersion::Initial,
-            index_hash,
-            index_size_uncompressed,
             index_method,
+            index_size_uncompressed,
             index_size_compressed,
+            index_hash,
         }
         .write(w)?;
         w.write_all(&index_data)?;
@@ -364,7 +362,7 @@ impl BrzIndexData {
         let mut sizes_uncompressed = Vec::with_capacity(num_blobs as usize);
         for _ in 0..num_blobs {
             let len = read_i32(r)?;
-            if len <= 0 {
+            if len < 0 {
                 return Err(BrzError::InvalidBlobDecompressedLength(len));
             }
             sizes_uncompressed.push(len);
@@ -372,7 +370,7 @@ impl BrzIndexData {
         let mut sizes_compressed = Vec::with_capacity(num_blobs as usize);
         for _ in 0..num_blobs {
             let len = read_i32(r)?;
-            if len <= 0 {
+            if len < 0 {
                 return Err(BrzError::InvalidBlobCompressedLength(len));
             }
             sizes_compressed.push(len);

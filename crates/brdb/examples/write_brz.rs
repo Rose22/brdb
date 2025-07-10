@@ -13,6 +13,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     });
 
+    if path.exists() {
+        std::fs::remove_file(&path)?;
+    }
     world.write_brz(&path)?;
 
     let db = Brz::new(&path)?.into_reader();

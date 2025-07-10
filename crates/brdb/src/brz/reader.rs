@@ -174,7 +174,14 @@ impl<T: AsRef<Brz>> BrFsReader for BrzIndex<T> {
     fn find_file(&self, parent_id: Option<i64>, name: &str) -> Result<Option<i64>, BrFsError> {
         let parent = parent_id.map(|id| id as i32).unwrap_or(-1);
         if let Some(&index) = self.files_lut.get(&(parent, name.to_string())) {
-            Ok(Some(index as i64))
+            // Get the blob id for the file
+            Ok(self
+                .archive
+                .as_ref()
+                .index_data
+                .file_content_ids
+                .get(index)
+                .and_then(|&id| (id > -1).then_some(id as i64)))
         } else {
             Ok(None)
         }
@@ -187,13 +194,12 @@ impl<T: AsRef<Brz>> BrFsReader for BrzIndex<T> {
             return Err(BrFsError::NotFound(format!("blob {content_id}")));
         }
 
-        let compression_method = index_data
+        let compression_method = *index_data
             .compression_methods
             .get(content_id as usize)
             .ok_or_else(|| {
                 BrFsError::NotFound(format!("compression method for blob {content_id}"))
-            })?
-            .clone();
+            })?;
 
         let size_uncompressed = index_data
             .sizes_uncompressed

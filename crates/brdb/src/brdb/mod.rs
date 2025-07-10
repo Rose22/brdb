@@ -160,14 +160,14 @@ impl Brdb {
         zstd_level: Option<i32>,
     ) -> Result<i64, BrdbError> {
         let size_uncompressed = content.len() as i64;
-        let mut size_compressed = 0;
+        let mut size_compressed = size_uncompressed;
         let mut compression = 0;
 
         // Compress the content if a zstd level is specified
         if let Some(zstd_level) = zstd_level {
             let compressed = compress(&content, zstd_level).map_err(BrFsError::Compress)?;
-            size_compressed = compressed.len() as i64;
-            if size_compressed < size_uncompressed {
+            if (compressed.len() as i64) < size_uncompressed {
+                size_compressed = compressed.len() as i64;
                 compression = 1;
                 content = compressed;
             }

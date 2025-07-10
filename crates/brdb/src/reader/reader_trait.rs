@@ -41,9 +41,10 @@ pub trait BrFsReader {
         }
 
         // Read the blob
-        Ok(self
+        let blob = self
             .find_blob(content_id)
-            .map_err(|e| e.wrap(format!("find blob {content_id}")))?
+            .map_err(|e| e.wrap(format!("find blob {content_id}")))?;
+        Ok(blob
             .read()
             .map_err(|e| e.wrap(format!("read blob {content_id}")))?)
     }

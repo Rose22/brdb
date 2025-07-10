@@ -345,7 +345,7 @@ impl BrPendingFs {
 
         let mut index = BrzIndexData::default();
         let mut blob_data = Vec::new();
-        let hash_to_blob_index: HashMap<[u8; 32], i32> = HashMap::new();
+        let mut hash_to_blob_index: HashMap<[u8; 32], i32> = HashMap::new();
 
         while let Some((parent_id, name, fs)) = queue.pop_front() {
             match fs {
@@ -378,21 +378,24 @@ impl BrPendingFs {
                     index.file_names.push(name.clone());
                     let hash = BrBlob::hash(&content);
 
-                    let content_id = if let Some(i) = hash_to_blob_index.get(&hash) {
+                    let content_id = if content.is_empty() {
+                        -1
+                    } else if let Some(i) = hash_to_blob_index.get(&hash) {
                         *i
                     } else {
                         let blob_id = index.num_blobs;
                         index.num_blobs += 1;
 
+                        hash_to_blob_index.insert(hash.clone(), blob_id);
                         index.blob_hashes.push(hash);
                         index.sizes_uncompressed.push(content.len() as i32);
+
+                        let start = blob_data.len();
 
                         // Compress the content if a zstd level is specified
                         if let Some(zstd_level) = zstd_level {
                             let compressed =
                                 compress(&content, zstd_level).map_err(BrFsError::Compress)?;
-
-                            let start = blob_data.len();
 
                             if compressed.len() < content.len() {
                                 index.sizes_compressed.push(compressed.len() as i32);
@@ -400,24 +403,24 @@ impl BrPendingFs {
                                     .compression_methods
                                     .push(CompressionMethod::GenericZstd);
                                 // Update the blob ranges with compressed size
-                                index.blob_ranges.push((start, start + compressed.len()));
                                 blob_data.extend_from_slice(&compressed);
                             } else {
                                 // If the compressed size is larger than the uncompressed size,
                                 // store it as uncompressed
-                                index.sizes_compressed.push(compressed.len() as i32);
+                                index.sizes_compressed.push(content.len() as i32);
                                 index.compression_methods.push(CompressionMethod::None);
                                 // Update blob ranges with uncompressed size
-                                index.blob_ranges.push((start, start + content.len()));
                                 blob_data.extend_from_slice(&content);
                             }
                         } else {
-                            index.sizes_compressed.push(0);
+                            index.sizes_compressed.push(content.len() as i32);
                             index
                                 .compression_methods
                                 .push(crate::brz::CompressionMethod::None);
+                            blob_data.extend_from_slice(&content);
                         }
 
+                        index.blob_ranges.push((start, blob_data.len()));
                         blob_id
                     };
 
