@@ -29,7 +29,7 @@ impl World {
     // Write a world to a file in the BRDB format
     #[cfg(feature = "brdb")]
     pub fn write_brdb(&self, path: impl AsRef<std::path::Path>) -> Result<(), BrError> {
-        crate::Brdb::open(path)?.save("BRDB-RS", self)
+        crate::Brdb::new(path)?.save("BRDB-RS", self)
     }
 
     // Write a world to a file in the BRZ format

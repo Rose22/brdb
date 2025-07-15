@@ -66,16 +66,14 @@ impl BrFs {
             (BrFs::File(file), BrPendingFs::File(Some(content))) => {
                 let hash = BrBlob::hash(&content);
 
-                // Check if this blob already exists
-                if let Some(blob) = db.find_blob_by_hash(content.len(), &hash)? {
-                    // File is unchanged
-                    if file.content_id == Some(blob.blob_id) {
-                        return Ok(());
-                    }
-
-                    // Delete the old file (because the content id changed)
-                    db.delete_file(file.file_id, created_at)?;
+                // Check if this blob already exists and the content is the same
+                if let Some(blob) = db.find_blob_by_hash(content.len(), &hash)?
+                    && file.content_id == Some(blob.blob_id)
+                {
+                    return Ok(());
                 }
+                // Delete the old file (because the content id changed)
+                db.delete_file(file.file_id, created_at)?;
 
                 // Insert the blob
                 let content_id = db.insert_blob(content, hash, zstd_level)?;
