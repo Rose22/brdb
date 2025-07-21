@@ -72,3 +72,13 @@ impl AsBrdbValue for BitFlags {
         Ok(self.vec.as_brdb_iter())
     }
 }
+
+impl TryFrom<&BrdbValue> for BitFlags {
+    type Error = crate::errors::BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        let vec: Vec<u8> = value.prop("Flags")?.try_into()?;
+        let len = vec.len();
+        Ok(Self { vec, bits: len * 8 })
+    }
+}

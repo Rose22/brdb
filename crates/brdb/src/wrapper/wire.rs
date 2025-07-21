@@ -1,7 +1,11 @@
 use std::fmt::Display;
 
 use crate::{
-    schema::as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
+    BrdbSchemaError,
+    schema::{
+        BrdbValue,
+        as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
+    },
     wrapper::{BString, BitFlags, ChunkIndex},
 };
 
@@ -17,7 +21,7 @@ impl AsBrdbValue for LocalWirePortSource {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         let field = prop_name.get(schema).unwrap();
         match field {
             "BrickIndexInChunk" => Ok(&self.brick_index_in_chunk),
@@ -25,6 +29,18 @@ impl AsBrdbValue for LocalWirePortSource {
             "PortIndex" => Ok(&self.port_index),
             _ => unreachable!(),
         }
+    }
+}
+
+impl TryFrom<&BrdbValue> for LocalWirePortSource {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            brick_index_in_chunk: value.prop("BrickIndexInChunk")?.as_brdb_u32()?,
+            component_type_index: value.prop("ComponentTypeIndex")?.as_brdb_u16()?,
+            port_index: value.prop("PortIndex")?.as_brdb_u16()?,
+        })
     }
 }
 
@@ -41,7 +57,7 @@ impl AsBrdbValue for RemoteWirePortSource {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         let field = prop_name.get(schema).unwrap();
         match field {
             "GridPersistentIndex" => Ok(&self.grid_persistent_index),
@@ -53,6 +69,20 @@ impl AsBrdbValue for RemoteWirePortSource {
         }
     }
 }
+impl TryFrom<&BrdbValue> for RemoteWirePortSource {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            grid_persistent_index: value.prop("GridPersistentIndex")?.as_brdb_u32()?,
+            chunk_index: value.prop("ChunkIndex")?.try_into()?,
+            brick_index_in_chunk: value.prop("BrickIndexInChunk")?.as_brdb_u32()?,
+            component_type_index: value.prop("ComponentTypeIndex")?.as_brdb_u16()?,
+            port_index: value.prop("PortIndex")?.as_brdb_u16()?,
+        })
+    }
+}
+
 pub struct WirePortTarget {
     pub brick_index_in_chunk: u32,
     pub component_type_index: u16,
@@ -64,7 +94,7 @@ impl AsBrdbValue for WirePortTarget {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         let field = prop_name.get(schema).unwrap();
         match field {
             "BrickIndexInChunk" => Ok(&self.brick_index_in_chunk),
@@ -72,6 +102,17 @@ impl AsBrdbValue for WirePortTarget {
             "PortIndex" => Ok(&self.port_index),
             _ => unreachable!(),
         }
+    }
+}
+impl TryFrom<&BrdbValue> for WirePortTarget {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            brick_index_in_chunk: value.prop("BrickIndexInChunk")?.as_brdb_u32()?,
+            component_type_index: value.prop("ComponentTypeIndex")?.as_brdb_u16()?,
+            port_index: value.prop("PortIndex")?.as_brdb_u16()?,
+        })
     }
 }
 
@@ -89,7 +130,7 @@ impl AsBrdbValue for WireChunkSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "PendingPropagationFlags" => Ok(&self.pending_propagation_flags),
             _ => unreachable!(),
@@ -100,7 +141,7 @@ impl AsBrdbValue for WireChunkSoA {
         schema: &crate::schema::BrdbSchema,
         _struct_name: crate::schema::BrdbInterned,
         prop_name: crate::schema::BrdbInterned,
-    ) -> Result<BrdbArrayIter, crate::errors::BrdbSchemaError> {
+    ) -> Result<BrdbArrayIter, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "RemoteWireSources" => Ok(self.remote_wire_sources.as_brdb_iter()),
             "LocalWireSources" => Ok(self.local_wire_sources.as_brdb_iter()),
@@ -108,6 +149,34 @@ impl AsBrdbValue for WireChunkSoA {
             "LocalWireTargets" => Ok(self.local_wire_targets.as_brdb_iter()),
             _ => unreachable!(),
         }
+    }
+}
+impl TryFrom<&BrdbValue> for WireChunkSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            remote_wire_sources: value
+                .prop("RemoteWireSources")?
+                .try_into()
+                .map_err(|e: BrdbSchemaError| e.wrap("RemoteWireSources"))?,
+            local_wire_sources: value
+                .prop("LocalWireSources")?
+                .try_into()
+                .map_err(|e: BrdbSchemaError| e.wrap("LocalWireSources"))?,
+            remote_wire_targets: value
+                .prop("RemoteWireTargets")?
+                .try_into()
+                .map_err(|e: BrdbSchemaError| e.wrap("RemoteWireTargets"))?,
+            local_wire_targets: value
+                .prop("LocalWireTargets")?
+                .try_into()
+                .map_err(|e: BrdbSchemaError| e.wrap("LocalWireTargets"))?,
+            pending_propagation_flags: value
+                .prop("PendingPropagationFlags")?
+                .try_into()
+                .map_err(|e: BrdbSchemaError| e.wrap("PendingPropagationFlags"))?,
+        })
     }
 }
 

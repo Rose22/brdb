@@ -7,7 +7,7 @@ use std::{
 use crate::{
     assets,
     schema::{
-        BrdbSchemaGlobalData,
+        BrdbSchemaGlobalData, BrdbValue,
         as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
     },
     wrapper::{BString, BitFlags, BrdbComponent},
@@ -560,6 +560,18 @@ impl AsBrdbValue for ChunkIndex {
         }
     }
 }
+impl TryFrom<&BrdbValue> for ChunkIndex {
+    type Error = crate::errors::BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: value.prop("X")?.as_brdb_i16()?,
+            y: value.prop("Y")?.as_brdb_i16()?,
+            z: value.prop("Z")?.as_brdb_i16()?,
+        })
+    }
+}
+
 impl Display for ChunkIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}_{}_{}", self.x, self.y, self.z)
