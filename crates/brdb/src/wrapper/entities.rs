@@ -69,6 +69,16 @@ impl AsBrdbValue for EntityTypeCounter {
         }
     }
 }
+impl TryFrom<&BrdbValue> for EntityTypeCounter {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            type_index: value.prop("TypeIndex")?.as_brdb_u32()?,
+            num_entities: value.prop("NumEntities")?.as_brdb_u32()?,
+        })
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct EntityColor {
@@ -278,6 +288,27 @@ impl AsBrdbValue for EntityChunkSoA {
             "ColorsAndAlphas" => Ok(self.colors_and_alphas.as_brdb_iter()),
             _ => unreachable!(),
         }
+    }
+}
+impl TryFrom<&BrdbValue> for EntityChunkSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            type_counters: value.prop("TypeCounters")?.try_into()?,
+            persistent_indices: value.prop("PersistentIndices")?.try_into()?,
+            owner_indices: value.prop("OwnerIndices")?.try_into()?,
+            locations: value.prop("Locations")?.try_into()?,
+            rotations: value.prop("Rotations")?.try_into()?,
+            weld_parent_flags: value.prop("WeldParentFlags")?.try_into()?,
+            physics_locked_flags: value.prop("PhysicsLockedFlags")?.try_into()?,
+            physics_sleeping_flags: value.prop("PhysicsSleepingFlags")?.try_into()?,
+            weld_parent_indices: value.prop("WeldParentIndices")?.try_into()?,
+            linear_velocities: value.prop("LinearVelocities")?.try_into()?,
+            angular_velocities: value.prop("AngularVelocities")?.try_into()?,
+            colors_and_alphas: value.prop("ColorsAndAlphas")?.try_into()?,
+            unwritten_struct_data: Vec::new(),
+        })
     }
 }
 

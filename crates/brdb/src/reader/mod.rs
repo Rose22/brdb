@@ -15,7 +15,7 @@ use crate::{
     lookup_entity_struct_name,
     pending::BrPendingFs,
     schema::{BrdbSchema, BrdbSchemaGlobalData, BrdbStruct, BrdbValue, ReadBrdbSchema},
-    schemas::{BRICK_COMPONENT_SOA, BRICK_WIRE_SOA},
+    schemas::{BRICK_COMPONENT_SOA, BRICK_WIRE_SOA, ENTITY_CHUNK_SOA},
     wrapper::schemas::{
         BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, ENTITY_CHUNK_INDEX_SOA, GLOBAL_DATA_SOA,
         OWNER_TABLE_SOA,
@@ -480,6 +480,25 @@ impl<T> BrReader<T> {
         Ok(entity_chunks_ids)
     }
 
+    pub fn entity_chunk_soa(&self, chunk: ChunkIndex) -> Result<BrdbStruct, BrError>
+    where
+        T: BrFsReader,
+    {
+        let schema = self.entities_schema()?;
+        let path = format!("World/0/Entities/Chunks/{chunk}.mps");
+        let mps = self
+            .read_file(path)?
+            .as_slice()
+            .read_brdb(&schema, ENTITY_CHUNK_SOA)?;
+        match mps {
+            BrdbValue::Struct(s) => Ok(*s),
+            ty => Err(BrError::Schema(BrdbSchemaError::ExpectedType(
+                "Struct".to_string(),
+                ty.get_type().to_owned(),
+            ))),
+        }
+    }
+
     pub fn entity_chunk(&self, chunk: ChunkIndex) -> Result<Vec<Entity>, BrError>
     where
         T: BrFsReader,
@@ -491,7 +510,7 @@ impl<T> BrReader<T> {
         let buf = &mut buf.as_slice();
         let illegal = "illegal".to_string();
 
-        let mps = buf.read_brdb(&schema, BRICK_CHUNK_SOA)?;
+        let mps = buf.read_brdb(&schema, ENTITY_CHUNK_SOA)?;
         let soa = match mps {
             BrdbValue::Struct(s) => *s,
             ty => {
