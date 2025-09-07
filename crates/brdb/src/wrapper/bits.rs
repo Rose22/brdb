@@ -20,6 +20,16 @@ impl BitFlags {
         }
     }
 
+    pub fn new_full(bits: usize) -> Self {
+        let mut vec = vec![0xFF; (bits + 7) / 8];
+        if bits % 8 != 0 {
+            let last_byte = vec.len() - 1;
+            let mask = (1 << (bits % 8)) - 1;
+            vec[last_byte] &= mask;
+        }
+        Self { vec, bits }
+    }
+
     pub fn get_from_brdb_array(vec: &BrdbValue, bit: usize) -> Result<bool, BrdbSchemaError> {
         let byte = vec
             .index(bit / 8)?
