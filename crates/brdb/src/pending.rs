@@ -8,7 +8,7 @@ use crate::{
         UnsavedFs,
         schemas::{
             self, BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_COMPONENT_SOA, BRICK_WIRE_SOA,
-            ENTITY_CHUNK_INDEX_SOA, ENTITY_CHUNK_SOA, GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
+            ENTITY_CHUNK_INDEX_SOA, GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
         },
     },
 };
@@ -263,30 +263,9 @@ impl BrPendingFs {
                 .entity_chunks
                 .into_iter()
                 .map(|(chunk, entities)| {
-                    let mut buf = world
-                        .entity_schema
-                        .write_brdb(ENTITY_CHUNK_SOA, &entities)
+                    let buf = entities
+                        .to_bytes(&world.entity_schema)
                         .about_f(|| format!("Entities/Chunks/{chunk}.mps"))?;
-
-                    for (i, entity_data) in entities.unwritten_struct_data.into_iter().enumerate() {
-                        // Unwrap safety: The component can only be added to unwritten_struct_data if
-                        // get_schema_struct() returns Some(_, Some(_))
-                        let Some((_, Some(struct_ty))) = entity_data.get_schema_struct() else {
-                            // Cannot write entity data without a type
-                            continue;
-                        };
-
-                        // Append to the buffer and serialize the component's data
-                        write::write_brdb(
-                            &world.entity_schema,
-                            &mut buf,
-                            struct_ty.as_ref(),
-                            &**entity_data,
-                        )
-                        .about_f(|| {
-                            format!("Entities/Chunks/{chunk}.mps entity {i} ({struct_ty})")
-                        })?;
-                    }
 
                     Ok((format!("{chunk}.mps"), File(Some(buf))))
                 })

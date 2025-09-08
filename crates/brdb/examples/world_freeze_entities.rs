@@ -1,13 +1,10 @@
-use brdb::{
-    BitFlags, Brdb, Brz, EntityChunkSoA, IntoReader, pending::BrPendingFs,
-    schemas::ENTITY_CHUNK_SOA,
-};
+use brdb::{Brdb, EntityChunkSoA, IntoReader, pending::BrPendingFs};
 use std::path::PathBuf;
 
 /// Opens a world and replaces its owners with PUBLIC
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let src = PathBuf::from("world.brdb");
-    let dst = PathBuf::from("world_patched.brz");
+    let dst = PathBuf::from("world_patched.brdb");
 
     assert!(src.exists());
 
@@ -15,14 +12,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let chunks = db.entity_chunk_index()?;
     let entity_schema = db.entities_schema()?;
+    let global_data = db.global_data()?;
     let mut chunk_files = vec![];
+
     for index in chunks {
-        let chunk = db.entity_chunk_soa(index)?.to_value();
-        let mut soa: EntityChunkSoA = (&chunk).try_into()?;
-        soa.physics_locked_flags = BitFlags::new_full(soa.locations.len());
+        // Entity_chunk loads entities and their entity data
+        let entities = db.entity_chunk(index)?;
+
+        // Re-assemble the soa. using add_entity ensures the extra data is correctly handled
+        let mut soa = EntityChunkSoA::default();
+        for mut e in entities.into_iter() {
+            e.frozen = true;
+            soa.add_entity(&global_data, &e, e.id.unwrap() as u32);
+        }
+
         chunk_files.push((
             format!("{index}.mps"),
-            BrPendingFs::File(Some(entity_schema.write_brdb(ENTITY_CHUNK_SOA, &soa)?)),
+            // EntityChunkSoA::to_bytes ensures the extra data is written after the SoA data
+            BrPendingFs::File(Some(soa.to_bytes(&entity_schema)?)),
         ));
     }
 
@@ -40,12 +47,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )])),
     )]);
 
-    // use .to_pending_patch() if you want to update the same world
+    // Use .to_pending_patch() if you want to update the same world
     let pending = db.to_pending()?.with_patch(patch)?;
     if dst.exists() {
         std::fs::remove_file(&dst)?;
     }
-    Brz::write_pending(&dst, pending)?;
+    Brdb::new(&dst)?.write_pending("Freeze Entities", pending)?;
+
+    // Ensure entities can be read
+    let db = Brdb::open(dst)?.into_reader();
+    let chunks = db.entity_chunk_index()?;
+    for index in chunks {
+        let _ = db.entity_chunk(index)?;
+    }
 
     Ok(())
 }

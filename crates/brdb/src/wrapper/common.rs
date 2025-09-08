@@ -3,7 +3,7 @@ use crate::{
     wrapper::CHUNK_SIZE,
 };
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector3f {
     pub x: f32,
     pub y: f32,
@@ -187,7 +187,7 @@ impl Vector3f {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Quat4f {
     pub x: f32,
     pub y: f32,

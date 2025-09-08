@@ -4,9 +4,11 @@ use crate::{
     assets::entities::{DYNAMIC_GRID, dynamic_grid_entity},
     errors::BrdbSchemaError,
     schema::{
-        BrdbSchemaGlobalData, BrdbValue,
+        BrdbSchema, BrdbSchemaGlobalData, BrdbValue,
         as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
+        write::write_brdb,
     },
+    schemas::ENTITY_CHUNK_SOA,
     wrapper::{BString, BitFlags, BrdbComponent, ChunkIndex, Color, Quat4f, Vector3f},
 };
 
@@ -50,6 +52,7 @@ impl Default for Entity {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct EntityTypeCounter {
     pub type_index: u32,
     pub num_entities: u32,
@@ -252,6 +255,24 @@ impl EntityChunkSoA {
         self.linear_velocities.push(entity.velocity);
         self.angular_velocities.push(entity.angular_velocity);
         self.colors_and_alphas.push(entity.color_and_alpha.clone());
+    }
+
+    pub fn to_bytes(self, schema: &BrdbSchema) -> Result<Vec<u8>, BrdbSchemaError> {
+        let mut buf = schema.write_brdb(ENTITY_CHUNK_SOA, &self)?;
+
+        for (i, entity_data) in self.unwritten_struct_data.into_iter().enumerate() {
+            // Unwrap safety: The component can only be added to unwritten_struct_data if
+            // get_schema_struct() returns Some(_, Some(_))
+            let Some((_, Some(struct_ty))) = entity_data.get_schema_struct() else {
+                // Cannot write entity data without a type
+                continue;
+            };
+
+            // Append to the buffer and serialize the component's data
+            write_brdb(&schema, &mut buf, struct_ty.as_ref(), &**entity_data)
+                .map_err(|e| e.wrap(format!("entity data {i}: {struct_ty}")))?;
+        }
+        Ok(buf)
     }
 }
 

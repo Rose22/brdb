@@ -6,7 +6,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Default)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd)]
 pub struct BitFlags {
     vec: Vec<u8>,
     bits: usize,
