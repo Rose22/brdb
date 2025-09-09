@@ -510,7 +510,9 @@ impl<T> BrReader<T> {
         let buf = &mut buf.as_slice();
         let illegal = "illegal".to_string();
 
-        let mps = buf.read_brdb(&schema, ENTITY_CHUNK_SOA)?;
+        let mps = buf
+            .read_brdb(&schema, ENTITY_CHUNK_SOA)
+            .map_err(|e| e.wrap(format!("Read entity chunk {chunk}")))?;
         let soa = match mps {
             BrdbValue::Struct(s) => *s,
             ty => {
@@ -523,8 +525,8 @@ impl<T> BrReader<T> {
 
         let mut entity_data = Vec::new();
         let mut index = 0;
-        let locked_flags = soa.prop("PhysicsLockedFlags")?;
-        let sleeping_flags = soa.prop("PhysicsSleepingFlags")?;
+        let locked_flags = soa.prop("PhysicsLockedFlags")?.prop("Flags")?;
+        let sleeping_flags = soa.prop("PhysicsSleepingFlags")?.prop("Flags")?;
 
         for counter in soa.prop("TypeCounters")?.as_array()? {
             let type_idx = counter.prop("TypeIndex")?.as_brdb_u32()?;

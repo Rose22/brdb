@@ -6,7 +6,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, Default)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd)]
 pub struct BitFlags {
     vec: Vec<u8>,
     bits: usize,
@@ -18,6 +18,16 @@ impl BitFlags {
             vec: vec![0; (bits + 7) / 8],
             bits,
         }
+    }
+
+    pub fn new_full(bits: usize) -> Self {
+        let mut vec = vec![0xFF; (bits + 7) / 8];
+        if bits % 8 != 0 {
+            let last_byte = vec.len() - 1;
+            let mask = (1 << (bits % 8)) - 1;
+            vec[last_byte] &= mask;
+        }
+        Self { vec, bits }
     }
 
     pub fn get_from_brdb_array(vec: &BrdbValue, bit: usize) -> Result<bool, BrdbSchemaError> {

@@ -437,7 +437,7 @@ impl<R: Read> ReadBrdbSchema for R {
 }
 
 #[cfg(test)]
-mod tests {
+mod schema_tests {
     #[test]
     fn test_plaintext() {
         let input = "enum Foo {

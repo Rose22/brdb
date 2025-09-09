@@ -233,7 +233,7 @@ impl BrFs {
     /// Navigate a brdb filesystem to a specific path.
     pub fn cd(&self, path: impl Display) -> Result<BrFs, BrFsError> {
         let path = path.to_string();
-        if self.is_root() && path.starts_with("/") {
+        if !self.is_root() && path.starts_with("/") {
             return Err(BrFsError::AbsolutePathNotAllowed);
         }
 
