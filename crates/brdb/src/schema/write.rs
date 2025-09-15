@@ -277,7 +277,8 @@ pub fn write_uint(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaErro
     if value < 128 {
         rmp::encode::write_pfix(buf, value as u8)?;
     } else if value <= u8::MAX as u64 {
-        rmp::encode::write_u8(buf, value as u8)?;
+        // u8 255 can be written as nfix -1
+        rmp::encode::write_nfix(buf, value as i8)?;
     } else if value <= u16::MAX as u64 {
         rmp::encode::write_u16(buf, value as u16)?;
     } else if value <= u32::MAX as u64 {
