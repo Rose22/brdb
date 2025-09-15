@@ -1,7 +1,7 @@
 use brdb::{Brdb, EntityChunkSoA, IntoReader, pending::BrPendingFs};
 use std::path::PathBuf;
 
-/// Opens a world and replaces its owners with PUBLIC
+/// Opens a world and freezes all its entities
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let src = PathBuf::from("world.brdb");
     let dst = PathBuf::from("world_patched.brdb");

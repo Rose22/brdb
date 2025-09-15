@@ -3,12 +3,11 @@ use std::{collections::HashMap, fmt::Display};
 use crate::{
     BrFsError,
     errors::BrError,
-    schema::write,
     wrapper::{
         UnsavedFs,
         schemas::{
-            self, BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_COMPONENT_SOA, BRICK_WIRE_SOA,
-            ENTITY_CHUNK_INDEX_SOA, GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
+            self, BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_WIRE_SOA, ENTITY_CHUNK_INDEX_SOA,
+            GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
         },
     },
 };
@@ -76,7 +75,7 @@ impl BrPendingFs {
                 (
                     "GlobalData.schema".to_owned(),
                     File(Some(
-                        global_data_schema.to_vec().about("GlobalData.schema")?,
+                        global_data_schema.to_bytes().about("GlobalData.schema")?,
                     )),
                 ),
                 (
@@ -90,7 +89,7 @@ impl BrPendingFs {
                 // Write Owners
                 (
                     "Owners.schema".to_owned(),
-                    File(Some(owners_schema.to_vec().about("Owners.schema")?)),
+                    File(Some(owners_schema.to_bytes().about("Owners.schema")?)),
                 ),
                 (
                     "Owners.mps".to_owned(),
@@ -115,19 +114,19 @@ impl BrPendingFs {
                     "ChunkIndexShared.schema".to_owned(),
                     File(Some(
                         brick_chunk_index_schema
-                            .to_vec()
+                            .to_bytes()
                             .about("ChunkIndexShared.schema")?,
                     )),
                 ),
                 (
                     "ChunksShared.schema".to_owned(),
                     File(Some(
-                        brick_chunk_schema.to_vec().about("ChunksShared.schema")?,
+                        brick_chunk_schema.to_bytes().about("ChunksShared.schema")?,
                     )),
                 ),
                 (
                     "WiresShared.schema".to_owned(),
-                    File(Some(wires_schema.to_vec().about("WiresShared.schema")?)),
+                    File(Some(wires_schema.to_bytes().about("WiresShared.schema")?)),
                 ),
                 // Component schema
                 (
@@ -135,7 +134,7 @@ impl BrPendingFs {
                     File(Some(
                         world
                             .component_schema
-                            .to_vec()
+                            .to_bytes()
                             .about("ComponentsShared.schema")?,
                     )),
                 ),
@@ -175,34 +174,11 @@ impl BrPendingFs {
                     .components
                     .into_iter()
                     .map(|(chunk, components)| {
-                        // Write the initial component SoA data to the buffer
-                        let mut chunk_buf = world
-                            .component_schema
-                            .write_brdb(BRICK_COMPONENT_SOA, &components)
+                        let buf = components
+                            .to_bytes(&world.component_schema)
                             .about_f(|| format!("Grids/{grid_id}/Components/{chunk}.mps"))?;
 
-                        // Write each component's struct data to the chunk buffer
-                        for (i, component) in
-                            components.unwritten_struct_data.into_iter().enumerate()
-                        {
-                            // Unwrap safety: The component can only be added to unwritten_struct_data if
-                            // get_schema_struct() returns Some(_, Some(_))
-                            let ty = component.get_schema_struct().unwrap().1.unwrap();
-
-                            // Append to the buffer and serialize the component's data
-                            write::write_brdb(
-                                &world.component_schema,
-                                &mut chunk_buf,
-                                &ty,
-                                component.as_ref(),
-                            )
-                            .about_f(|| {
-                                format!(
-                                    "Grids/{grid_id}/Components/{chunk}.mps component {i} ({ty})"
-                                )
-                            })?;
-                        }
-                        Ok((format!("{chunk}.mps"), File(Some(chunk_buf))))
+                        Ok((format!("{chunk}.mps"), File(Some(buf))))
                     })
                     .collect::<Result<Vec<_>, BrError>>()?;
                 let wire_chunks_dir = grid
@@ -238,7 +214,7 @@ impl BrPendingFs {
                     "ChunkIndex.schema".to_owned(),
                     File(Some(
                         entity_chunk_index_schema
-                            .to_vec()
+                            .to_bytes()
                             .about("ChunkIndex.schema")?,
                     )),
                 ),
@@ -253,7 +229,10 @@ impl BrPendingFs {
                 (
                     "ChunksShared.schema".to_owned(),
                     File(Some(
-                        world.entity_schema.to_vec().about("ChunksShared.schema")?,
+                        world
+                            .entity_schema
+                            .to_bytes()
+                            .about("ChunksShared.schema")?,
                     )),
                 ),
             ];

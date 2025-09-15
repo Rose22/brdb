@@ -27,6 +27,13 @@ impl BrdbStruct {
         self.properties.get(&key)
     }
 
+    pub fn get_name(&self) -> &str {
+        self.schema
+            .intern
+            .lookup_ref(self.name)
+            .unwrap_or("unknown")
+    }
+
     pub fn prop(&self, prop: impl AsRef<str>) -> Result<&BrdbValue, BrdbSchemaError> {
         let prop = prop.as_ref();
         self.get(prop).ok_or_else(|| {
@@ -38,6 +45,35 @@ impl BrdbStruct {
                 prop.to_owned(),
             )
         })
+    }
+
+    pub fn set_prop(
+        &mut self,
+        prop: impl AsRef<str>,
+        value: BrdbValue,
+    ) -> Result<(), BrdbSchemaError> {
+        let prop = prop.as_ref();
+        let key = self.schema.intern.get(prop).ok_or_else(|| {
+            BrdbSchemaError::MissingStructField(
+                self.schema
+                    .intern
+                    .lookup(self.name)
+                    .unwrap_or_else(|| "unknown struct".to_string()),
+                prop.to_owned(),
+            )
+        })?;
+        // ensure prop exists
+        if !self.properties.contains_key(&key) {
+            return Err(BrdbSchemaError::MissingStructField(
+                self.schema
+                    .intern
+                    .lookup(self.name)
+                    .unwrap_or_else(|| "unknown struct".to_string()),
+                prop.to_owned(),
+            ));
+        }
+        self.properties.insert(key, value);
+        Ok(())
     }
 
     pub fn as_hashmap(&self) -> Result<HashMap<String, Box<dyn AsBrdbValue>>, BrdbSchemaError> {

@@ -1,11 +1,15 @@
 use crate::{
+    BrdbSchemaError,
     schema::{
-        BrdbSchemaGlobalData, BrdbSchemaMeta,
+        BrdbInterned, BrdbSchema, BrdbSchemaGlobalData, BrdbSchemaMeta, BrdbStruct, BrdbValue,
         as_brdb::{AsBrdbIter, AsBrdbValue},
+        write::write_brdb,
     },
+    schemas::BRICK_COMPONENT_SOA,
     wrapper::{BString, Quat4f, Vector3f},
 };
 
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ComponentTypeCounter {
     pub type_index: u32,
     pub num_instances: u32,
@@ -14,15 +18,26 @@ pub struct ComponentTypeCounter {
 impl AsBrdbValue for ComponentTypeCounter {
     fn as_brdb_struct_prop_value(
         &self,
-        schema: &crate::schema::BrdbSchema,
-        _struct_name: crate::schema::BrdbInterned,
-        prop_name: crate::schema::BrdbInterned,
+        schema: &BrdbSchema,
+        _struct_name: BrdbInterned,
+        prop_name: BrdbInterned,
     ) -> Result<&dyn AsBrdbValue, crate::errors::BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "TypeIndex" => Ok(&self.type_index),
             "NumInstances" => Ok(&self.num_instances),
             _ => unreachable!(),
         }
+    }
+}
+
+impl TryFrom<&BrdbValue> for ComponentTypeCounter {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            type_index: value.prop("TypeIndex")?.as_brdb_u32()?,
+            num_instances: value.prop("NumInstances")?.as_brdb_u32()?,
+        })
     }
 }
 
@@ -79,16 +94,38 @@ impl ComponentChunkSoA {
             self.unwritten_struct_data.push(component.boxed_component());
         }
     }
+
+    pub fn to_bytes(self, schema: &BrdbSchema) -> Result<Vec<u8>, BrdbSchemaError> {
+        let mut buf = schema.write_brdb(BRICK_COMPONENT_SOA, &self)?;
+
+        for (i, component_data) in self.unwritten_struct_data.into_iter().enumerate() {
+            // Unwrap safety: The component can only be added to unwritten_struct_data if
+            // get_schema_struct() returns Some(_, Some(_))
+            let Some((_, Some(struct_ty))) = component_data.get_schema_struct() else {
+                // Cannot write entity data without a type
+                continue;
+            };
+
+            // Append to the buffer and serialize the component's data
+            write_brdb(
+                &schema,
+                &mut buf,
+                struct_ty.as_ref(),
+                component_data.as_ref(),
+            )
+            .map_err(|e| e.wrap(format!("component data {i}: {struct_ty}")))?;
+        }
+        Ok(buf)
+    }
 }
 
 impl AsBrdbValue for ComponentChunkSoA {
     fn as_brdb_struct_prop_array(
         &self,
-        schema: &crate::schema::BrdbSchema,
-        _struct_name: crate::schema::BrdbInterned,
-        prop_name: crate::schema::BrdbInterned,
-    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError>
-    {
+        schema: &BrdbSchema,
+        _struct_name: BrdbInterned,
+        prop_name: BrdbInterned,
+    ) -> Result<crate::schema::as_brdb::BrdbArrayIter, crate::errors::BrdbSchemaError> {
         Ok(match prop_name.get(schema).unwrap() {
             "ComponentTypeCounters" => self.component_type_counters.as_brdb_iter(),
             "ComponentBrickIndices" => self.component_brick_indices.as_brdb_iter(),
@@ -97,6 +134,26 @@ impl AsBrdbValue for ComponentChunkSoA {
             "JointInitialRelativeOffsets" => self.joint_initial_relative_offsets.as_brdb_iter(),
             "JointInitialRelativeRotations" => self.joint_initial_relative_rotations.as_brdb_iter(),
             _ => unreachable!(),
+        })
+    }
+}
+
+impl TryFrom<&BrdbValue> for ComponentChunkSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            component_type_counters: value.prop("ComponentTypeCounters")?.try_into()?,
+            component_brick_indices: value.prop("ComponentBrickIndices")?.try_into()?,
+            joint_brick_indices: value.prop("JointBrickIndices")?.try_into()?,
+            joint_entity_references: value.prop("JointEntityReferences")?.try_into()?,
+            joint_initial_relative_offsets: value
+                .prop("JointInitialRelativeOffsets")?
+                .try_into()?,
+            joint_initial_relative_rotations: value
+                .prop("JointInitialRelativeRotations")?
+                .try_into()?,
+            unwritten_struct_data: Vec::new(),
         })
     }
 }
@@ -140,3 +197,22 @@ impl<T: Clone + BrdbComponent + 'static> BoxedComponent for T {
 
 // Empty component... may have its usecases
 impl BrdbComponent for () {}
+
+// This may be a footgun when crafting brdbs from nothing but it's helpful for editing brdb files in place
+impl BrdbComponent for BrdbStruct {
+    fn get_schema(&self) -> Option<BrdbSchemaMeta> {
+        None
+    }
+
+    fn get_external_asset_references(&self) -> Vec<(BString, BString)> {
+        Vec::new()
+    }
+
+    fn get_schema_struct(&self) -> Option<(BString, Option<BString>)> {
+        Some((BString::Static(""), Some(self.get_name().to_owned().into())))
+    }
+
+    fn get_wire_ports(&self) -> Vec<BString> {
+        Vec::new()
+    }
+}

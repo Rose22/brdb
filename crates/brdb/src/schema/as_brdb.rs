@@ -2,7 +2,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::{
     errors::BrdbSchemaError,
-    schema::{BrdbInterned, BrdbSchema, BrdbSchemaEnum, BrdbValue, WireVariant},
+    schema::{BrdbInterned, BrdbSchema, BrdbSchemaEnum, BrdbStruct, BrdbValue, WireVariant},
 };
 
 pub type BrdbArrayIter<'a> = Box<dyn ExactSizeIterator<Item = &'a dyn AsBrdbValue> + 'a>;
@@ -232,7 +232,7 @@ impl AsBrdbValue for BrdbValue {
     fn as_brdb_struct_prop_value(
         &self,
         schema: &BrdbSchema,
-        _struct_name: BrdbInterned,
+        struct_name: BrdbInterned,
         prop_name: BrdbInterned,
     ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         let BrdbValue::Struct(s) = self else {
@@ -242,25 +242,12 @@ impl AsBrdbValue for BrdbValue {
             ));
         };
 
-        if let Some(prop) = s.properties.get(&prop_name) {
-            Ok(prop)
-        } else {
-            Err(BrdbSchemaError::MissingStructField(
-                schema
-                    .intern
-                    .lookup(s.name)
-                    .unwrap_or_else(|| "unknown struct".to_owned()),
-                schema
-                    .intern
-                    .lookup(prop_name)
-                    .unwrap_or_else(|| "unknown property".to_owned()),
-            ))
-        }
+        s.as_brdb_struct_prop_value(schema, struct_name, prop_name)
     }
     fn as_brdb_struct_prop_array(
         &self,
         schema: &BrdbSchema,
-        _struct_name: BrdbInterned,
+        struct_name: BrdbInterned,
         prop_name: BrdbInterned,
     ) -> Result<BrdbArrayIter, BrdbSchemaError> {
         let BrdbValue::Struct(s) = self else {
@@ -269,24 +256,12 @@ impl AsBrdbValue for BrdbValue {
                 self.get_type().to_string(),
             ));
         };
-        match s.properties.get(&prop_name) {
-            Some(BrdbValue::Array(vec)) | Some(BrdbValue::FlatArray(vec)) => Ok(vec.as_brdb_iter()),
-            _ => Err(BrdbSchemaError::MissingStructField(
-                schema
-                    .intern
-                    .lookup(s.name)
-                    .unwrap_or_else(|| "unknown struct".to_owned()),
-                schema
-                    .intern
-                    .lookup(prop_name)
-                    .unwrap_or_else(|| "unknown property".to_owned()),
-            )),
-        }
+        s.as_brdb_struct_prop_array(schema, struct_name, prop_name)
     }
     fn as_brdb_struct_prop_map(
         &self,
         schema: &BrdbSchema,
-        _struct_name: BrdbInterned,
+        struct_name: BrdbInterned,
         prop_name: BrdbInterned,
     ) -> Result<BrdbMapIter, BrdbSchemaError> {
         let BrdbValue::Struct(s) = self else {
@@ -295,7 +270,61 @@ impl AsBrdbValue for BrdbValue {
                 self.get_type().to_string(),
             ));
         };
-        if let Some(BrdbValue::Map(map)) = s.properties.get(&prop_name) {
+        s.as_brdb_struct_prop_map(schema, struct_name, prop_name)
+    }
+}
+
+impl AsBrdbValue for BrdbStruct {
+    fn as_brdb_struct_prop_value(
+        &self,
+        schema: &BrdbSchema,
+        _struct_name: BrdbInterned,
+        prop_name: BrdbInterned,
+    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
+        if let Some(prop) = self.properties.get(&prop_name) {
+            Ok(prop)
+        } else {
+            Err(BrdbSchemaError::MissingStructField(
+                schema
+                    .intern
+                    .lookup(self.name)
+                    .unwrap_or_else(|| "unknown struct".to_owned()),
+                schema
+                    .intern
+                    .lookup(prop_name)
+                    .unwrap_or_else(|| "unknown property".to_owned()),
+            ))
+        }
+    }
+
+    fn as_brdb_struct_prop_array(
+        &self,
+        schema: &BrdbSchema,
+        _struct_name: BrdbInterned,
+        prop_name: BrdbInterned,
+    ) -> Result<BrdbArrayIter, BrdbSchemaError> {
+        match self.properties.get(&prop_name) {
+            Some(BrdbValue::Array(vec)) | Some(BrdbValue::FlatArray(vec)) => Ok(vec.as_brdb_iter()),
+            _ => Err(BrdbSchemaError::MissingStructField(
+                schema
+                    .intern
+                    .lookup(self.name)
+                    .unwrap_or_else(|| "unknown struct".to_owned()),
+                schema
+                    .intern
+                    .lookup(prop_name)
+                    .unwrap_or_else(|| "unknown property".to_owned()),
+            )),
+        }
+    }
+
+    fn as_brdb_struct_prop_map(
+        &self,
+        schema: &BrdbSchema,
+        _struct_name: BrdbInterned,
+        prop_name: BrdbInterned,
+    ) -> Result<BrdbMapIter, BrdbSchemaError> {
+        if let Some(BrdbValue::Map(map)) = self.properties.get(&prop_name) {
             Ok(Box::new(map.iter().map(|(k, v)| {
                 (k as &dyn AsBrdbValue, v as &dyn AsBrdbValue)
             })))
@@ -303,7 +332,7 @@ impl AsBrdbValue for BrdbValue {
             Err(BrdbSchemaError::MissingStructField(
                 schema
                     .intern
-                    .lookup(s.name)
+                    .lookup(self.name)
                     .unwrap_or_else(|| "unknown struct".to_owned()),
                 schema
                     .intern
@@ -313,6 +342,7 @@ impl AsBrdbValue for BrdbValue {
         }
     }
 }
+
 impl AsBrdbValue for WireVariant {
     fn as_brdb_wire_variant(&self) -> Result<WireVariant, BrdbSchemaError> {
         Ok(self.clone())
