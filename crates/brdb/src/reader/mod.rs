@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     AsBrdbValue, BString, BitFlags, BrFsError, BrdbComponent, ChunkIndex, ComponentChunkSoA,
-    Entity,
+    Entity, EntityChunkIndexSoA,
     assets::LiteralComponent,
     errors::{BrError, BrdbSchemaError},
     lookup_entity_struct_name,
@@ -66,7 +66,6 @@ pub struct ChunkMeta {
     pub num_wires: u32,
     pub num_components: u32,
 }
-
 impl Deref for ChunkMeta {
     type Target = ChunkIndex;
 
@@ -444,11 +443,7 @@ impl<T> BrReader<T> {
             .enumerate()
             .map(|(i, s)| {
                 Ok(ChunkMeta {
-                    index: ChunkIndex {
-                        x: s.prop("X")?.as_brdb_i16()?,
-                        y: s.prop("Y")?.as_brdb_i16()?,
-                        z: s.prop("Z")?.as_brdb_i16()?,
-                    },
+                    index: s.try_into()?,
                     num_bricks: num_bricks.index_unwrap(i)?.as_brdb_u32()?,
                     num_wires: num_wires.index_unwrap(i)?.as_brdb_u32()?,
                     num_components: num_components.index_unwrap(i)?.as_brdb_u32()?,
@@ -519,19 +514,19 @@ impl<T> BrReader<T> {
             .read_file("World/0/Entities/ChunkIndex.mps")?
             .as_slice()
             .read_brdb(&self.entities_chunk_index_schema()?, ENTITY_CHUNK_INDEX_SOA)?;
-        let entity_chunks_ids = entities_index
-            .prop("Chunk3DIndices")?
-            .as_array()?
-            .into_iter()
-            .map(|s| {
-                Ok(ChunkIndex {
-                    x: s.prop("X")?.as_brdb_i16()?,
-                    y: s.prop("Y")?.as_brdb_i16()?,
-                    z: s.prop("Z")?.as_brdb_i16()?,
-                })
-            })
-            .collect::<Result<Vec<_>, BrdbSchemaError>>()?;
-        Ok(entity_chunks_ids)
+        Ok(entities_index.prop("Chunk3DIndices")?.try_into()?)
+    }
+
+    /// Read the entity chunk indices
+    pub fn entity_chunk_index_soa(&self) -> Result<EntityChunkIndexSoA, BrError>
+    where
+        T: BrFsReader,
+    {
+        let entities_index = self
+            .read_file("World/0/Entities/ChunkIndex.mps")?
+            .as_slice()
+            .read_brdb(&self.entities_chunk_index_schema()?, ENTITY_CHUNK_INDEX_SOA)?;
+        Ok((&entities_index).try_into()?)
     }
 
     pub fn entity_chunk(&self, chunk: ChunkIndex) -> Result<Vec<Entity>, BrError>
