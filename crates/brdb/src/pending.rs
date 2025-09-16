@@ -19,7 +19,7 @@ use crate::{
 /// Any overwritten files will be marked as deleted
 ///
 /// A revision will be created along with all of the pending
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BrPendingFs {
     Root(Vec<(String, BrPendingFs)>),
     Folder(Option<Vec<(String, BrPendingFs)>>),
