@@ -257,10 +257,11 @@ fn read_uint(buf: &mut impl Read) -> Result<u64, BrdbSchemaError> {
         Marker::U8 => buf
             .read_u8()
             .map_err(rmp::decode::ValueReadError::InvalidDataRead)? as u64,
+        Marker::I8 => buf.read_data_i8()? as u64,
         Marker::U16 => buf.read_data_u16()? as u64,
         Marker::U32 => buf.read_data_u32()? as u64,
         Marker::U64 => buf.read_data_u64()? as u64,
-        // It's very sneaky making values 128 thru 255 use FixNeg markers...
+        // It's very sneaky making values 224 thru 255 use FixNeg markers...
         Marker::FixNeg(value) => (256 + (value as i16)) as u64,
         m => {
             return Err(BrdbSchemaError::ExpectedType(

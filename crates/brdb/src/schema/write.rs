@@ -27,7 +27,7 @@ pub fn write_type(
 ) -> Result<(), BrdbSchemaError> {
     Ok(match (ty, value) {
         ("bool", BrdbValue::Bool(v)) => write_bool(buf, *v)?,
-        ("u8", BrdbValue::U8(v)) => write_uint(buf, *v as u64)?,
+        ("u8", BrdbValue::U8(v)) => write_u8(buf, *v as u64)?,
         ("u16", BrdbValue::U16(v)) => write_uint(buf, *v as u64)?,
         ("u32", BrdbValue::U32(v)) => write_uint(buf, *v as u64)?,
         ("u64", BrdbValue::U64(v)) => write_uint(buf, *v)?,
@@ -273,11 +273,21 @@ pub fn write_int(buf: &mut impl Write, value: i64) -> Result<(), BrdbSchemaError
 }
 
 /// Write the smallest possible unsigned integer representation of `value` to the buffer.
-pub fn write_uint(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaError> {
-    if value < 128 {
+pub fn write_u8(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaError> {
+    if value <= 127 {
         rmp::encode::write_pfix(buf, value as u8)?;
-    } else if value == 255 {
-        rmp::encode::write_nfix(buf, -1)?;
+    } else if value > 256 - 32 && value <= u8::MAX as u64 {
+        rmp::encode::write_nfix(buf, value as i8)?;
+    } else {
+        rmp::encode::write_u8(buf, value as u8)?;
+    }
+    Ok(())
+}
+
+/// Write the smallest possible unsigned integer representation of `value` to the buffer.
+pub fn write_uint(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaError> {
+    if value <= 127 {
+        rmp::encode::write_pfix(buf, value as u8)?;
     } else if value <= u8::MAX as u64 {
         rmp::encode::write_u8(buf, value as u8)?;
     } else if value <= u16::MAX as u64 {
@@ -438,7 +448,7 @@ pub fn write_brdb(
 
     match ty {
         "bool" => write_bool(buf, value.as_brdb_bool()?)?,
-        "u8" => write_uint(buf, value.as_brdb_u8()? as u64)?,
+        "u8" => write_u8(buf, value.as_brdb_u8()? as u64)?,
         "u16" => write_uint(buf, value.as_brdb_u16()? as u64)?,
         "u32" => write_uint(buf, value.as_brdb_u32()? as u64)?,
         "u64" => write_uint(buf, value.as_brdb_u64()?)?,
@@ -584,6 +594,16 @@ mod tests {
         for i in 0..512 {
             buf.clear();
             super::write_uint(&mut buf, i).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_write_u8() {
+        // write ints from 0 to 512
+        let mut buf = Vec::new();
+        for i in 0..256 {
+            buf.clear();
+            super::write_u8(&mut buf, i).unwrap();
         }
     }
 }
