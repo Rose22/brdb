@@ -387,7 +387,7 @@ impl BrdbSchema {
     }
 
     /// Serialize the schema to a vector of bytes
-    pub fn to_vec(&self) -> Result<Vec<u8>, BrdbSchemaError> {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, BrdbSchemaError> {
         let mut buf = Vec::new();
         self.write(&mut buf)?;
         Ok(buf)

@@ -375,6 +375,17 @@ impl AsBrdbValue for EntityChunkIndexSoA {
         }
     }
 }
+impl TryFrom<&BrdbValue> for EntityChunkIndexSoA {
+    type Error = BrdbSchemaError;
+
+    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
+        Ok(Self {
+            next_persistent_index: value.prop("NextPersistentIndex")?.as_brdb_u32()?,
+            chunk_3d_indices: value.prop("Chunk3DIndices")?.try_into()?,
+            num_entities: value.prop("NumEntities")?.try_into()?,
+        })
+    }
+}
 
 /// This function may only be useful for legacy worlds from steam next fest.
 /// New worlds will properly pair the class name with the entity type
