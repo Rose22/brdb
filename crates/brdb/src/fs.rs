@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use indexmap::IndexMap;
 
 use crate::{
@@ -231,32 +229,42 @@ impl BrFs {
     }
 
     /// Navigate a brdb filesystem to a specific path.
-    pub fn cd(&self, path: impl Display) -> Result<BrFs, BrFsError> {
-        let path = path.to_string();
-        if !self.is_root() && path.starts_with("/") {
+    pub fn cd(&self, path: impl AsRef<str>) -> Result<BrFs, BrFsError> {
+        if !self.is_root() && path.as_ref().starts_with("/") {
             return Err(BrFsError::AbsolutePathNotAllowed);
         }
 
-        let is_last = !path.contains("/");
+        let mut components = path
+            .as_ref()
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .peekable();
+        let mut curr = self;
 
-        // Recursively resolve the path
-        match self {
-            BrFs::Root(_) | BrFs::Folder(_, _) if is_last => Ok(self.clone()),
-            BrFs::Root(children) | BrFs::Folder(_, children) => {
-                // Unwrap safety - components.count() > 0
-                let (first, _) = path.split_once("/").unwrap();
-                if let Some(child) = children.get(first) {
-                    child
-                        .cd(path.strip_prefix(first).unwrap())
-                        .map_err(|e| e.prepend(self.name()))
-                } else {
-                    Err(BrFsError::NotFound(format!("{}/{first}", self.name(),)))
+        while let Some(name) = components.next() {
+            match curr {
+                BrFs::Root(children) | BrFs::Folder(_, children) => {
+                    if let Some(child) = children.get(name) {
+                        curr = child;
+                    } else {
+                        return Err(BrFsError::NotFound(format!("{}/{name}", curr.name())));
+                    }
+                }
+                // Cannot cd into a file
+                BrFs::File(_) if components.peek().is_some() => {
+                    return Err(BrFsError::ExpectedDirectory(curr.name()));
+                }
+                // Ensure the file name matches if it's the last component
+                BrFs::File(f) if f.name == name => {
+                    return Ok(curr.clone());
+                }
+                BrFs::File(_) => {
+                    return Err(BrFsError::NotFound(format!("{}/{name}", curr.name())));
                 }
             }
-            // Cannot cd in a file
-            BrFs::File(_) if !is_last => Err(BrFsError::ExpectedDirectory(self.name())),
-            BrFs::File(_) => Ok(self.clone()),
         }
+
+        Ok(curr.clone())
     }
 
     /// Read the content of a file in the brdb filesystem.
