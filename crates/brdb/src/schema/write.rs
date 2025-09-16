@@ -276,10 +276,11 @@ pub fn write_int(buf: &mut impl Write, value: i64) -> Result<(), BrdbSchemaError
 pub fn write_uint(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaError> {
     if value < 128 {
         rmp::encode::write_pfix(buf, value as u8)?;
-    } else if value >= 255 - 32 && value <= u8::MAX as u64 {
-        // u8 255 can be written as nfix -1
-        // but it's limited from -32 to 0
-        rmp::encode::write_nfix(buf, value as i8)?;
+    } else if value >= 256 - 32 && value <= u8::MAX as u64 {
+        // For values 224-255, map them to -32 to -1 (using negative fixnum)
+        // We need to explicitly calculate the correct negative value
+        let negative_val = -((256 - value) as i8);
+        rmp::encode::write_nfix(buf, negative_val)?;
     } else if value <= u8::MAX as u64 {
         rmp::encode::write_u8(buf, value as u8)?;
     } else if value <= u16::MAX as u64 {
@@ -575,4 +576,17 @@ fn write_brdb_flat(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_write_uint() {
+        // write ints from 0 to 512
+        let mut buf = Vec::new();
+        for i in 0..512 {
+            buf.clear();
+            super::write_uint(&mut buf, i).unwrap();
+        }
+    }
 }
