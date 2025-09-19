@@ -55,11 +55,11 @@ fn test_memory_save() -> Result<(), Box<dyn std::error::Error>> {
     db.save("test world", &world)?;
 
     let mps = db.brick_chunk_soa(1, (0, 0, 0).into())?;
-    let color = mps.prop("ColorsAndAlphas")?.index(0)?.unwrap();
-    assert_eq!(color.prop("R")?.as_brdb_u8()?, 255);
-    assert_eq!(color.prop("G")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("B")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("A")?.as_brdb_u8()?, 5);
+    let color = mps.colors_and_alphas[0];
+    assert_eq!(color.r, 255);
+    assert_eq!(color.g, 0);
+    assert_eq!(color.b, 0);
+    assert_eq!(color.a, 5);
 
     Ok(())
 }
@@ -83,11 +83,11 @@ fn test_write_save() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", db.get_fs()?.render());
 
     let soa = db.brick_chunk_soa(1, (0, 0, 0).into())?;
-    let color = soa.prop("ColorsAndAlphas")?.index(0)?.unwrap();
-    assert_eq!(color.prop("R")?.as_brdb_u8()?, 255);
-    assert_eq!(color.prop("G")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("B")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("A")?.as_brdb_u8()?, 5);
+    let color = soa.colors_and_alphas[0];
+    assert_eq!(color.r, 255);
+    assert_eq!(color.g, 0);
+    assert_eq!(color.b, 0);
+    assert_eq!(color.a, 5);
 
     Ok(())
 }
@@ -181,7 +181,7 @@ fn test_read_test() -> Result<(), BrError> {
     println!("{}", db.get_fs()?.render());
 
     let data = db.brick_chunk_soa(1, (0, 0, 0).into())?;
-    println!("data: {data}");
+    println!("data: {data:?}");
 
     Ok(())
 }
@@ -208,10 +208,10 @@ fn test_read_all_components() -> Result<(), BrError> {
     println!("Brick chunks: {chunks:?}");
     for chunk in chunks {
         let soa = db.brick_chunk_soa(1, chunk.index)?;
-        println!("Brick soa: {soa}");
+        println!("Brick soa: {soa:?}");
         if chunk.num_components > 0 {
-            let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
-            println!("Components soa: {soa}");
+            let (_soa, components) = db.component_chunk_soa(1, chunk.index)?;
+            // println!("Components soa: {soa}");
             for c in components {
                 println!("Component: {c}");
             }
@@ -248,7 +248,7 @@ fn test_debugging() -> Result<(), BrError> {
     println!("Entity assets: {:?}", global_data.entity_type_names);
 
     let bricks = db.brick_chunk_soa(3, (-1, -1, -1).into())?;
-    println!("Bricks: {bricks}");
+    println!("Bricks: {bricks:?}");
 
     let entity_schema = db.entities_schema()?;
 

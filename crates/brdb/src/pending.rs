@@ -44,6 +44,10 @@ where
 }
 
 impl BrPendingFs {
+    pub fn is_root(&self) -> bool {
+        matches!(self, BrPendingFs::Root(_))
+    }
+
     pub fn from_unsaved(fs: UnsavedFs) -> Result<Self, BrError> {
         use BrPendingFs::*;
         let mut worlds = vec![];
@@ -463,6 +467,68 @@ impl BrPendingFs {
             }
         }
         Ok(())
+    }
+
+    /// Navigate a pending brdb filesystem to a specific path.
+    pub fn cd(&self, path: impl AsRef<str>) -> Result<&BrPendingFs, BrFsError> {
+        let mut components = path
+            .as_ref()
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .peekable();
+
+        let mut curr: &Self = self;
+
+        while let Some(name) = components.next() {
+            let children = match curr {
+                BrPendingFs::Root(items) => items,
+                BrPendingFs::Folder(Some(items)) => items,
+                BrPendingFs::Folder(None) => Err(BrFsError::NotFound(name.to_string()))?,
+                BrPendingFs::File(_) => Err(if components.peek().is_some() {
+                    BrFsError::ExpectedDirectory(name.to_string())
+                } else {
+                    BrFsError::NotFound(name.to_string())
+                })?,
+            };
+
+            let Some((_, next)) = children.iter().find(|(n, _)| n == name) else {
+                return Err(BrFsError::NotFound(name.to_string()));
+            };
+            curr = next;
+        }
+
+        Ok(curr)
+    }
+
+    /// Navigate a pending brdb filesystem to a specific path.
+    pub fn cd_owned(self, path: impl AsRef<str>) -> Result<BrPendingFs, BrFsError> {
+        let mut components = path
+            .as_ref()
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .peekable();
+
+        let mut curr: Self = self;
+
+        while let Some(name) = components.next() {
+            let children = match curr {
+                BrPendingFs::Root(items) => items,
+                BrPendingFs::Folder(Some(items)) => items,
+                BrPendingFs::Folder(None) => Err(BrFsError::NotFound(name.to_string()))?,
+                BrPendingFs::File(_) => Err(if components.peek().is_some() {
+                    BrFsError::ExpectedDirectory(name.to_string())
+                } else {
+                    BrFsError::NotFound(name.to_string())
+                })?,
+            };
+
+            let Some((_, next)) = children.into_iter().find(|(n, _)| n == name) else {
+                return Err(BrFsError::NotFound(name.to_string()));
+            };
+            curr = next;
+        }
+
+        Ok(curr)
     }
 }
 

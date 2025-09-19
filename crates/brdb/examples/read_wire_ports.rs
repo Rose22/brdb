@@ -38,9 +38,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let soa = db.brick_chunk_soa(1, chunk.index)?;
 
         // Iterate basic bricks
-        let pb_index = soa.prop("ProceduralBrickStartingIndex")?.as_brdb_u32()?;
-        for (i, t) in soa.prop("BrickTypeIndices")?.as_array()?.iter().enumerate() {
-            let t = t.as_brdb_u32()?;
+        let pb_index = soa.procedural_brick_starting_index;
+        for (i, t) in soa.brick_type_indices.into_iter().enumerate() {
             if t >= pb_index {
                 continue;
             }
@@ -61,16 +60,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if chunk.num_components > 0 {
             let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
-            let indices = soa.prop("ComponentBrickIndices")?.as_array()?;
+            let indices = soa.component_brick_indices;
 
             // Expand the type index/num instances into a flat list of type indices
             let type_indices = soa
-                .prop("ComponentTypeCounters")?
-                .as_array()?
+                .component_type_counters
                 .iter()
                 .flat_map(|v| {
-                    let index = v.prop("TypeIndex").unwrap().as_brdb_u32().unwrap() as u16;
-                    (0..v.prop("NumInstances").unwrap().as_brdb_u32().unwrap()).map(move |_| index)
+                    let index = v.type_index as u16;
+                    (0..v.num_instances).map(move |_| index)
                 })
                 .collect::<Vec<_>>();
 

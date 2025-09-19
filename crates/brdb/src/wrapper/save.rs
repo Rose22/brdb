@@ -266,7 +266,7 @@ pub struct UnsavedGrid {
 
 impl UnsavedGrid {
     /// Appends a new chunk to the chunk_index SoA, returning the index of the chunk
-    fn get_chunk_index(&mut self, chunk_index: ChunkIndex) -> usize {
+    pub fn get_chunk_index(&mut self, chunk_index: ChunkIndex) -> usize {
         // Add the chunk to the index if it doesn't exist
         if let Some(index) = self.chunk_index_map.get(&chunk_index) {
             *index
@@ -282,7 +282,7 @@ impl UnsavedGrid {
     }
 
     /// Add a brick to the grid, returning the chunk index and the brick index
-    fn add_brick(
+    pub fn add_brick(
         &mut self,
         global_data: &BrdbSchemaGlobalData,
         brick: &Brick,
@@ -315,7 +315,7 @@ impl UnsavedGrid {
         (chunk_index, brick_index as usize)
     }
 
-    fn add_local_wire(
+    pub fn add_local_wire(
         &mut self,
         chunk: ChunkIndex,
         source: LocalWirePortSource,
@@ -327,7 +327,7 @@ impl UnsavedGrid {
             .add_local_wire(source, target);
     }
 
-    fn add_remote_wire(
+    pub fn add_remote_wire(
         &mut self,
         chunk: ChunkIndex,
         source: RemoteWirePortSource,

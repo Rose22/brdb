@@ -1,4 +1,4 @@
-use brdb::{AsBrdbValue, BrFsReader, Brick, Brz, IntoReader, World};
+use brdb::{BrFsReader, Brick, Brz, IntoReader, World};
 use std::path::PathBuf;
 
 /// Writes a world with one brick to example_brick
@@ -23,11 +23,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", db.get_fs()?.render());
 
     let soa = db.brick_chunk_soa(1, (0, 0, 0).into())?;
-    let color = soa.prop("ColorsAndAlphas")?.index(0)?.unwrap();
-    assert_eq!(color.prop("R")?.as_brdb_u8()?, 255);
-    assert_eq!(color.prop("G")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("B")?.as_brdb_u8()?, 0);
-    assert_eq!(color.prop("A")?.as_brdb_u8()?, 5);
+    let color = soa.colors_and_alphas[0];
+    assert_eq!(color.r, 255);
+    assert_eq!(color.g, 0);
+    assert_eq!(color.b, 0);
+    assert_eq!(color.a, 5);
 
     Ok(())
 }

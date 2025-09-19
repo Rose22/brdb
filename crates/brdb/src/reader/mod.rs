@@ -9,8 +9,8 @@ use std::{
 };
 
 use crate::{
-    AsBrdbValue, BString, BitFlags, BrFsError, BrdbComponent, ChunkIndex, ComponentChunkSoA,
-    Entity, EntityChunkIndexSoA,
+    AsBrdbValue, BString, BrFsError, BrdbComponent, BrickChunkSoA, ChunkIndex, ComponentChunkSoA,
+    Entity, EntityChunkIndexSoA, EntityChunkSoA,
     assets::LiteralComponent,
     errors::{BrError, BrdbSchemaError},
     lookup_entity_struct_name,
@@ -253,7 +253,7 @@ impl<T> BrReader<T> {
         &self,
         grid_id: usize,
         chunk: ChunkIndex,
-    ) -> Result<(BrdbStruct, Vec<BrdbStruct>), BrError>
+    ) -> Result<(ComponentChunkSoA, Vec<BrdbStruct>), BrError>
     where
         T: BrFsReader,
     {
@@ -265,29 +265,19 @@ impl<T> BrReader<T> {
         let buf = &mut buf.as_slice();
 
         let mps = buf.read_brdb(&schema, BRICK_COMPONENT_SOA)?;
-        let soa = match mps {
-            BrdbValue::Struct(s) => *s,
-            ty => {
-                return Err(BrError::Schema(BrdbSchemaError::ExpectedType(
-                    "Struct".to_string(),
-                    ty.get_type().to_owned(),
-                )));
-            }
-        };
+        let soa = ComponentChunkSoA::try_from(&mps)
+            .map_err(|e| e.wrap(format!("Read component chunk {chunk}")))?;
 
         let mut component_data = Vec::new();
-        let type_counters = soa.prop("ComponentTypeCounters")?.as_array()?;
-        for counter in type_counters {
-            let type_idx = counter.prop("TypeIndex")?.as_brdb_u32()?;
-            let num_instances = counter.prop("NumInstances")?.as_brdb_u32()?;
+        for counter in &soa.component_type_counters {
             let type_name = global_data
                 .component_type_names
-                .get_index(type_idx as usize)
+                .get_index(counter.type_index as usize)
                 .cloned()
                 .unwrap_or("illegal".to_string());
             let struct_name = global_data
                 .component_data_struct_names
-                .get(type_idx as usize)
+                .get(counter.type_index as usize)
                 .cloned()
                 .unwrap_or("illegal".to_string());
 
@@ -295,7 +285,7 @@ impl<T> BrReader<T> {
                 continue;
             }
 
-            for _ in 0..num_instances {
+            for _ in 0..counter.num_instances {
                 let BrdbValue::Struct(s) = buf
                     .read_brdb(&schema, &struct_name)
                     .map_err(|e| e.wrap(format!("Read component {type_name}/{struct_name}")))?
@@ -452,7 +442,11 @@ impl<T> BrReader<T> {
             .collect::<Result<Vec<_>, BrdbSchemaError>>()?;
         Ok(chunk_indices)
     }
-    pub fn brick_chunk_soa(&self, grid_id: usize, chunk: ChunkIndex) -> Result<BrdbStruct, BrError>
+    pub fn brick_chunk_soa(
+        &self,
+        grid_id: usize,
+        chunk: ChunkIndex,
+    ) -> Result<BrickChunkSoA, BrError>
     where
         T: BrFsReader,
     {
@@ -461,13 +455,7 @@ impl<T> BrReader<T> {
             .read_file(path)?
             .as_slice()
             .read_brdb(&self.bricks_schema()?, BRICK_CHUNK_SOA)?;
-        match mps {
-            BrdbValue::Struct(s) => Ok(*s),
-            ty => Err(BrError::Schema(BrdbSchemaError::ExpectedType(
-                "Struct".to_string(),
-                ty.get_type().to_owned(),
-            ))),
-        }
+        Ok((&mps).try_into()?)
     }
     /// Read the shared entity chunk schema
     pub fn entities_schema(&self) -> Result<Arc<BrdbSchema>, BrError>
@@ -543,31 +531,20 @@ impl<T> BrReader<T> {
         let mps = buf
             .read_brdb(&schema, ENTITY_CHUNK_SOA)
             .map_err(|e| e.wrap(format!("Read entity chunk {chunk}")))?;
-        let soa = match mps {
-            BrdbValue::Struct(s) => *s,
-            ty => {
-                return Err(BrError::Schema(BrdbSchemaError::ExpectedType(
-                    "Struct".to_string(),
-                    ty.get_type().to_owned(),
-                )));
-            }
-        };
+        let soa = EntityChunkSoA::try_from(&mps)
+            .map_err(|e| e.wrap(format!("Read entity chunk {chunk}")))?;
 
         let mut entity_data = Vec::new();
         let mut index = 0;
-        let locked_flags = soa.prop("PhysicsLockedFlags")?.prop("Flags")?;
-        let sleeping_flags = soa.prop("PhysicsSleepingFlags")?.prop("Flags")?;
 
-        for counter in soa.prop("TypeCounters")?.as_array()? {
-            let type_idx = counter.prop("TypeIndex")?.as_brdb_u32()?;
-            let num_instances = counter.prop("NumEntities")?.as_brdb_u32()?;
+        for counter in soa.type_counters {
             let type_name = global_data
                 .entity_type_names
-                .get_index(type_idx as usize)
+                .get_index(counter.type_index as usize)
                 .unwrap_or(&illegal);
 
             let struct_name = lookup_entity_struct_name(type_name);
-            for i in 0..num_instances {
+            for i in 0..counter.num_entities {
                 let data: Arc<Box<dyn BrdbComponent>> = if let Some(struct_name) = struct_name {
                     let value = buf.read_brdb(&schema, struct_name).map_err(|e| {
                         e.wrap(format!("Read entity {i} {type_name}/{struct_name}"))
@@ -586,33 +563,15 @@ impl<T> BrReader<T> {
 
                 entity_data.push(Entity {
                     asset: BString::from(type_name),
-                    id: Some(
-                        soa.prop("PersistentIndices")?
-                            .index_unwrap(index)?
-                            .as_brdb_u32()? as usize,
-                    ),
-                    owner_index: Some(
-                        soa.prop("OwnerIndices")?
-                            .index_unwrap(index)?
-                            .as_brdb_u32()?,
-                    ),
-                    location: soa.prop("Locations")?.index_unwrap(index)?.try_into()?,
-                    rotation: soa.prop("Rotations")?.index_unwrap(index)?.try_into()?,
-                    velocity: soa
-                        .prop("LinearVelocities")?
-                        .index_unwrap(index)?
-                        .try_into()?,
-                    angular_velocity: soa
-                        .prop("AngularVelocities")?
-                        .index_unwrap(index)?
-                        .try_into()?,
-                    color_and_alpha: soa
-                        .prop("ColorsAndAlphas")?
-                        .index_unwrap(index)?
-                        .try_into()?,
-
-                    frozen: BitFlags::get_from_brdb_array(locked_flags, index)?,
-                    sleeping: BitFlags::get_from_brdb_array(sleeping_flags, index)?,
+                    id: Some(soa.persistent_indices[index] as usize),
+                    owner_index: Some(soa.owner_indices[index]),
+                    location: soa.locations[index],
+                    rotation: soa.rotations[index],
+                    velocity: soa.linear_velocities[index],
+                    angular_velocity: soa.angular_velocities[index],
+                    color_and_alpha: soa.colors_and_alphas[index].clone(),
+                    frozen: soa.physics_locked_flags.get(index),
+                    sleeping: soa.physics_sleeping_flags.get(index),
                     data,
                 });
                 index += 1;
@@ -624,7 +583,7 @@ impl<T> BrReader<T> {
     pub fn entity_chunk_soa(
         &self,
         chunk: ChunkIndex,
-    ) -> Result<(BrdbStruct, Vec<Option<BrdbStruct>>), BrError>
+    ) -> Result<(EntityChunkSoA, Vec<Option<BrdbStruct>>), BrError>
     where
         T: BrFsReader,
     {
@@ -633,24 +592,17 @@ impl<T> BrReader<T> {
         let buf = self.read_file(path)?;
         let buf = &mut buf.as_slice();
         let mps = buf.read_brdb(&schema, ENTITY_CHUNK_SOA)?;
-        let soa = match mps {
-            BrdbValue::Struct(s) => Ok(*s),
-            ty => Err(BrError::Schema(BrdbSchemaError::ExpectedType(
-                "Struct".to_string(),
-                ty.get_type().to_owned(),
-            ))),
-        }?;
+        let soa = EntityChunkSoA::try_from(&mps)
+            .map_err(|e| e.wrap(format!("Read entity chunk {chunk}")))?;
         let global_data = self.global_data()?;
         let illegal = "illegal".to_string();
 
         let mut entity_data = Vec::new();
 
-        for counter in soa.prop("TypeCounters")?.as_array()? {
-            let type_idx = counter.prop("TypeIndex")?.as_brdb_u32()?;
-            let num_instances = counter.prop("NumEntities")?.as_brdb_u32()?;
+        for counter in &soa.type_counters {
             let type_name = global_data
                 .entity_type_names
-                .get_index(type_idx as usize)
+                .get_index(counter.type_index as usize)
                 .unwrap_or(&illegal);
 
             let Some(struct_name) = lookup_entity_struct_name(type_name) else {
@@ -662,7 +614,7 @@ impl<T> BrReader<T> {
                 continue;
             }
 
-            for i in 0..num_instances {
+            for i in 0..counter.num_entities {
                 let BrdbValue::Struct(s) = buf
                     .read_brdb(&schema, struct_name)
                     .map_err(|e| e.wrap(format!("Read entity {i} {type_name}/{struct_name}")))?

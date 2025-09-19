@@ -18,10 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Brick chunks: {chunks:?}");
     for chunk in chunks {
         let soa = db.brick_chunk_soa(1, chunk.index)?;
-        println!("Brick soa: {soa}");
+        println!("Brick soa: {soa:?}");
         if chunk.num_components > 0 {
-            let (soa, components) = db.component_chunk_soa(1, chunk.index)?;
-            println!("Components soa: {soa}");
+            let (_soa, components) = db.component_chunk_soa(1, chunk.index)?;
+            // println!("Components soa: {soa}");
             for c in components {
                 println!("Component: {c}");
             }

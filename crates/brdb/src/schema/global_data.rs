@@ -4,6 +4,7 @@ use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    BString, BrdbSchemaError,
     schema::as_brdb::{AsBrdbIter, AsBrdbValue, BrdbArrayIter},
     wrapper::{BrdbComponent, Brick, BrickType},
 };
@@ -90,6 +91,40 @@ impl BrdbSchemaGlobalData {
     }
     pub fn add_entity_type(&mut self, type_name: &str) {
         self.entity_type_names.insert(type_name.to_string());
+    }
+
+    pub fn basic_brick_asset_by_index(&self, index: usize) -> Result<BString, BrdbSchemaError> {
+        Ok(self
+            .basic_brick_asset_names
+            .get_index(index as usize)
+            .ok_or_else(|| {
+                BrdbSchemaError::UnknownAsset("basic_brick_asset_name".to_string(), index)
+            })?
+            .to_owned()
+            .into())
+    }
+
+    pub fn procedural_brick_asset_by_index(
+        &self,
+        index: usize,
+    ) -> Result<BString, BrdbSchemaError> {
+        Ok(self
+            .procedural_brick_asset_names
+            .get_index(index as usize)
+            .ok_or_else(|| {
+                BrdbSchemaError::UnknownAsset("procedural_brick_asset_name".to_string(), index)
+            })?
+            .to_owned()
+            .into())
+    }
+
+    pub fn material_asset_by_index(&self, index: usize) -> Result<BString, BrdbSchemaError> {
+        Ok(self
+            .material_asset_names
+            .get_index(index as usize)
+            .ok_or_else(|| BrdbSchemaError::UnknownAsset("material_asset_name".to_string(), index))?
+            .to_owned()
+            .into())
     }
 }
 

@@ -34,6 +34,14 @@ impl BString {
     pub const fn str(s: &'static str) -> Self {
         BString::Static(s)
     }
+
+    pub fn arc(&self) -> Self {
+        match self {
+            BString::Owned(s) => BString::Arc(Arc::new(s.clone())),
+            BString::Static(s) => BString::Arc(Arc::new(s.to_string())),
+            BString::Arc(s) => BString::Arc(s.clone()),
+        }
+    }
 }
 
 impl From<String> for BString {
