@@ -69,7 +69,7 @@ impl AsBrdbValue for EntityTypeCounter {
         match prop_name.get(schema).unwrap() {
             "TypeIndex" => Ok(&self.type_index),
             "NumEntities" => Ok(&self.num_entities),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -142,7 +142,7 @@ impl AsBrdbValue for EntityColors {
             "Color5" => Ok(&self.5),
             "Color6" => Ok(&self.6),
             "Color7" => Ok(&self.7),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -242,7 +242,7 @@ impl AsBrdbValue for EntityChunkSoA {
             "WeldParentFlags" => Ok(&self.weld_parent_flags),
             "PhysicsLockedFlags" => Ok(&self.physics_locked_flags),
             "PhysicsSleepingFlags" => Ok(&self.physics_sleeping_flags),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 
@@ -262,7 +262,7 @@ impl AsBrdbValue for EntityChunkSoA {
             "LinearVelocities" => Ok(self.linear_velocities.as_brdb_iter()),
             "AngularVelocities" => Ok(self.angular_velocities.as_brdb_iter()),
             "ColorsAndAlphas" => Ok(self.colors_and_alphas.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -313,7 +313,7 @@ impl AsBrdbValue for EntityChunkIndexSoA {
     ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "NextPersistentIndex" => Ok(&self.next_persistent_index),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 
@@ -326,7 +326,7 @@ impl AsBrdbValue for EntityChunkIndexSoA {
         match prop_name.get(schema).unwrap() {
             "Chunk3DIndices" => Ok(self.chunk_3d_indices.as_brdb_iter()),
             "NumEntities" => Ok(self.num_entities.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }

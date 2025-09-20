@@ -27,7 +27,7 @@ impl AsBrdbValue for LocalWirePortSource {
             "BrickIndexInChunk" => Ok(&self.brick_index_in_chunk),
             "ComponentTypeIndex" => Ok(&self.component_type_index),
             "PortIndex" => Ok(&self.port_index),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -65,7 +65,7 @@ impl AsBrdbValue for RemoteWirePortSource {
             "BrickIndexInChunk" => Ok(&self.brick_index_in_chunk),
             "ComponentTypeIndex" => Ok(&self.component_type_index),
             "PortIndex" => Ok(&self.port_index),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -100,7 +100,7 @@ impl AsBrdbValue for WirePortTarget {
             "BrickIndexInChunk" => Ok(&self.brick_index_in_chunk),
             "ComponentTypeIndex" => Ok(&self.component_type_index),
             "PortIndex" => Ok(&self.port_index),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -133,7 +133,7 @@ impl AsBrdbValue for WireChunkSoA {
     ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
         match prop_name.get(schema).unwrap() {
             "PendingPropagationFlags" => Ok(&self.pending_propagation_flags),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
     fn as_brdb_struct_prop_array(
@@ -147,7 +147,7 @@ impl AsBrdbValue for WireChunkSoA {
             "LocalWireSources" => Ok(self.local_wire_sources.as_brdb_iter()),
             "RemoteWireTargets" => Ok(self.remote_wire_targets.as_brdb_iter()),
             "LocalWireTargets" => Ok(self.local_wire_targets.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }

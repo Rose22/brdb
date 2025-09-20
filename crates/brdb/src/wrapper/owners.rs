@@ -92,7 +92,7 @@ impl AsBrdbValue for Guid {
             "B" => Ok(&self.b),
             "C" => Ok(&self.c),
             "D" => Ok(&self.d),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -224,7 +224,7 @@ impl AsBrdbValue for OwnerTableSoA {
             "BrickCounts" => Ok(self.brick_counts.as_brdb_iter()),
             "ComponentCounts" => Ok(self.component_counts.as_brdb_iter()),
             "WireCounts" => Ok(self.wire_counts.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }

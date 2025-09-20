@@ -25,7 +25,7 @@ impl AsBrdbValue for ComponentTypeCounter {
         match prop_name.get(schema).unwrap() {
             "TypeIndex" => Ok(&self.type_index),
             "NumInstances" => Ok(&self.num_instances),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -133,7 +133,7 @@ impl AsBrdbValue for ComponentChunkSoA {
             "JointEntityReferences" => self.joint_entity_references.as_brdb_iter(),
             "JointInitialRelativeOffsets" => self.joint_initial_relative_offsets.as_brdb_iter(),
             "JointInitialRelativeRotations" => self.joint_initial_relative_rotations.as_brdb_iter(),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         })
     }
 }

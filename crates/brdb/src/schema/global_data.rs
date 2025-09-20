@@ -161,7 +161,7 @@ impl AsBrdbValue for BrdbSchemaGlobalData {
             "ComponentWirePortNames" => self.component_wire_port_names.as_brdb_iter(),
             // BRSavedPrimaryAssetId is automatically inferred from (&str, &str)
             "ExternalAssetReferences" => self.external_asset_references.as_brdb_iter(),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         })
     }
 }

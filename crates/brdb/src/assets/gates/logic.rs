@@ -257,7 +257,7 @@ impl LogicGate {
             Self::STRUCT_CONSTANT_STR => "struct BrickComponentData_WireGraphPseudo_Const { Value: wire_graph_variant }",
             Self::STRUCT_BLEND_STR => "struct BrickComponentData_WireGraph_Expr_MathBlend { InputA: wire_graph_variant, InputB: wire_graph_variant, Blend: f64 }",
             Self::STRUCT_EDGE_DETECTOR_STR => "struct BrickComponentData_WireGraph_Expr_EdgeDetector { Input: f64, bPulseOnRisingEdge: bool, bPulseOnFallingEdge: bool }",
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct {n}"),
         };
         BrdbSchema::parse_to_meta(schema_str).unwrap()
     }

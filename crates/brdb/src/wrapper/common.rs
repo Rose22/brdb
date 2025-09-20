@@ -32,7 +32,7 @@ impl AsBrdbValue for Vector3f {
             "X" => Ok(&self.x),
             "Y" => Ok(&self.y),
             "Z" => Ok(&self.z),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -219,7 +219,7 @@ impl AsBrdbValue for Quat4f {
             "Y" => Ok(&self.y),
             "Z" => Ok(&self.z),
             "W" => Ok(&self.w),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
