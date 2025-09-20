@@ -320,7 +320,7 @@ pub fn write_float64(buf: &mut impl Write, value: f64) -> Result<(), BrdbSchemaE
     Ok(())
 }
 
-fn write_flat_type(
+pub fn write_flat_type(
     schema: &BrdbSchema,
     buf: &mut impl Write,
     ty: &str,
@@ -546,7 +546,7 @@ pub fn write_brdb(
     Ok(())
 }
 
-fn write_brdb_flat(
+pub fn write_brdb_flat(
     schema: &BrdbSchema,
     buf: &mut impl Write,
     ty: &str,

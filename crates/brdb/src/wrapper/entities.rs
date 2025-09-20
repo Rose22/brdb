@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
+    SavedBrickColor,
     assets::entities::{DYNAMIC_GRID, dynamic_grid_entity},
     errors::BrdbSchemaError,
     schema::{
@@ -9,7 +10,7 @@ use crate::{
         write::write_brdb,
     },
     schemas::ENTITY_CHUNK_SOA,
-    wrapper::{BString, BitFlags, BrdbComponent, ChunkIndex, Color, Quat4f, Vector3f},
+    wrapper::{BString, BitFlags, BrdbComponent, ChunkIndex, Quat4f, Vector3f},
 };
 
 #[derive(Clone)]
@@ -83,78 +84,32 @@ impl TryFrom<&BrdbValue> for EntityTypeCounter {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct EntityColor {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-}
-impl EntityColor {
-    pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b, a: 255 }
-    }
-}
-
-impl TryFrom<&BrdbValue> for EntityColor {
-    type Error = BrdbSchemaError;
-    fn try_from(value: &BrdbValue) -> Result<Self, Self::Error> {
-        let r = value.prop("R")?.as_brdb_u8()?;
-        let g = value.prop("G")?.as_brdb_u8()?;
-        let b = value.prop("B")?.as_brdb_u8()?;
-        let a = value.prop("A")?.as_brdb_u8()?;
-        Ok(Self { r, g, b, a })
-    }
-}
-
-impl From<Color> for EntityColor {
-    fn from(color: Color) -> Self {
-        Self::rgb(color.r, color.g, color.b)
-    }
-}
-
-impl AsBrdbValue for EntityColor {
-    fn as_brdb_struct_prop_value(
-        &self,
-        schema: &crate::schema::BrdbSchema,
-        _struct_name: crate::schema::BrdbInterned,
-        prop_name: crate::schema::BrdbInterned,
-    ) -> Result<&dyn AsBrdbValue, BrdbSchemaError> {
-        match prop_name.get(schema).unwrap() {
-            "R" => Ok(&self.r),
-            "G" => Ok(&self.g),
-            "B" => Ok(&self.b),
-            "A" => Ok(&self.a),
-            _ => unreachable!(),
-        }
-    }
-}
-impl Default for EntityColor {
-    fn default() -> Self {
-        Self {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        }
-    }
-}
-
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct EntityColors(
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
-    pub EntityColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
+    pub SavedBrickColor,
 );
+impl Default for EntityColors {
+    fn default() -> Self {
+        Self(
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+            SavedBrickColor::entity_default(),
+        )
+    }
+}
+
 impl TryFrom<&BrdbValue> for EntityColors {
     type Error = BrdbSchemaError;
 

@@ -1,14 +1,11 @@
 use std::{collections::HashMap, fmt::Display};
 
 use crate::{
-    BrFsError,
+    BrFsError, Wrap,
     errors::BrError,
     wrapper::{
         UnsavedFs,
-        schemas::{
-            self, BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_WIRE_SOA, ENTITY_CHUNK_INDEX_SOA,
-            GLOBAL_DATA_SOA, OWNER_TABLE_SOA,
-        },
+        schemas::{self, ENTITY_CHUNK_INDEX_SOA, GLOBAL_DATA_SOA, OWNER_TABLE_SOA},
     },
 };
 
@@ -24,23 +21,6 @@ pub enum BrPendingFs {
     Root(Vec<(String, BrPendingFs)>),
     Folder(Option<Vec<(String, BrPendingFs)>>),
     File(Option<Vec<u8>>),
-}
-
-// Helper trait for adding context to errors
-trait Wrap<T> {
-    fn about(self, name: impl Display) -> Result<T, BrError>;
-    fn about_f(self, name: impl FnMut() -> String) -> Result<T, BrError>;
-}
-impl<T, E> Wrap<T> for Result<T, E>
-where
-    BrError: From<E>,
-{
-    fn about(self, name: impl Display) -> Result<T, BrError> {
-        self.map_err(|e| BrError::from(e).wrap(name))
-    }
-    fn about_f(self, mut name: impl FnMut() -> String) -> Result<T, BrError> {
-        self.map_err(|e| BrError::from(e).wrap(name()))
-    }
 }
 
 impl BrPendingFs {
@@ -60,19 +40,7 @@ impl BrPendingFs {
         let entity_chunk_index_schema = schemas::entities_chunk_index_schema();
 
         for (world_id, world) in fs.worlds {
-            // This index needs to exist because the type ids of brick assets are
-            // stored in the GlobalData, and the type ids of procedural
-            // bricks are assigned starting from the end of the basic brick
-            // asset names.
-            //
-            // When new brick assets are added, the length of the basic
-            // brick asset names will increase, and the type ids of procedural
-            // bricks in older chunks will not match the new
-            // basic brick asset names.
-            //
-            // This offset allows older chunks to properly load, assuming the global
-            // data does not change the order of brick asset names.
-            let proc_brick_starting_index = world.global_data.basic_brick_asset_names.len() as u32;
+            let proc_brick_starting_index = world.global_data.proc_brick_starting_index();
 
             let mut world_dir = vec![
                 // Write GlobalData
@@ -145,72 +113,12 @@ impl BrPendingFs {
             ];
             let mut grids_dir = vec![];
 
-            // Bricks/Grids/N/Chunks
-            // Bricks/Grids/N/Components
-            // Bricks/Grids/N/Wires
-            // Bricks/Grids/N/ChunkIndex.mps
             for (grid_id, grid) in world.grids {
-                let mut grid_dir = vec![(
-                    "ChunkIndex.mps".to_owned(),
-                    File(Some(
-                        brick_chunk_index_schema
-                            .write_brdb(BRICK_CHUNK_INDEX_SOA, &grid.chunk_index)
-                            .about_f(|| format!("Grids/{grid_id}/ChunkIndex.mps"))?,
-                    )),
-                )];
-
-                let brick_chunks_dir = grid
-                    .bricks
-                    .into_iter()
-                    .map(|(chunk, mut bricks)| {
-                        bricks.procedural_brick_starting_index = proc_brick_starting_index;
-                        Ok((
-                            format!("{chunk}.mps"),
-                            File(Some(
-                                brick_chunk_schema
-                                    .write_brdb(BRICK_CHUNK_SOA, &bricks)
-                                    .about_f(|| format!("Grids/{grid_id}/Chunks/{chunk}.mps"))?,
-                            )),
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, BrError>>()?;
-                let component_chunks_dir = grid
-                    .components
-                    .into_iter()
-                    .map(|(chunk, components)| {
-                        let buf = components
-                            .to_bytes(&world.component_schema)
-                            .about_f(|| format!("Grids/{grid_id}/Components/{chunk}.mps"))?;
-
-                        Ok((format!("{chunk}.mps"), File(Some(buf))))
-                    })
-                    .collect::<Result<Vec<_>, BrError>>()?;
-                let wire_chunks_dir = grid
-                    .wires
-                    .iter()
-                    .map(|(chunk, wires)| {
-                        Ok((
-                            format!("{chunk}.mps"),
-                            File(Some(
-                                wires_schema
-                                    .write_brdb(BRICK_WIRE_SOA, wires)
-                                    .about_f(|| format!("Grids/{grid_id}/Wires/{chunk}.mps"))?,
-                            )),
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, BrError>>()?;
-
-                // Append non-empty chunk directories to the grid directory
-                if !brick_chunks_dir.is_empty() {
-                    grid_dir.push(("Chunks".to_owned(), Folder(Some(brick_chunks_dir))));
-                }
-                if !component_chunks_dir.is_empty() {
-                    grid_dir.push(("Components".to_owned(), Folder(Some(component_chunks_dir))));
-                }
-                if !wire_chunks_dir.is_empty() {
-                    grid_dir.push(("Wires".to_owned(), Folder(Some(wire_chunks_dir))));
-                }
-                grids_dir.push((grid_id.to_string(), Folder(Some(grid_dir))));
+                grids_dir.push((
+                    grid_id.to_string(),
+                    grid.to_pending(proc_brick_starting_index, &world.component_schema)
+                        .about_f(|| format!("Grids/{grid_id}"))?,
+                ));
             }
 
             let mut entities_dir = vec![
@@ -477,7 +385,7 @@ impl BrPendingFs {
             .filter(|s| !s.is_empty())
             .peekable();
 
-        let mut curr: &Self = self;
+        let mut curr = self;
 
         while let Some(name) = components.next() {
             let children = match curr {
@@ -501,6 +409,37 @@ impl BrPendingFs {
     }
 
     /// Navigate a pending brdb filesystem to a specific path.
+    pub fn cd_mut(&mut self, path: impl AsRef<str>) -> Result<&mut BrPendingFs, BrFsError> {
+        let mut components = path
+            .as_ref()
+            .split('/')
+            .filter(|s| !s.is_empty())
+            .peekable();
+
+        let mut curr = self;
+
+        while let Some(name) = components.next() {
+            let children = match curr {
+                BrPendingFs::Root(items) => items,
+                BrPendingFs::Folder(Some(items)) => items,
+                BrPendingFs::Folder(None) => Err(BrFsError::NotFound(name.to_string()))?,
+                BrPendingFs::File(_) => Err(if components.peek().is_some() {
+                    BrFsError::ExpectedDirectory(name.to_string())
+                } else {
+                    BrFsError::NotFound(name.to_string())
+                })?,
+            };
+
+            let Some((_, next)) = children.iter_mut().find(|(n, _)| n == name) else {
+                return Err(BrFsError::NotFound(name.to_string()));
+            };
+            curr = next;
+        }
+
+        Ok(curr)
+    }
+
+    /// Navigate a pending brdb filesystem to a specific path.
     pub fn cd_owned(self, path: impl AsRef<str>) -> Result<BrPendingFs, BrFsError> {
         let mut components = path
             .as_ref()
@@ -508,7 +447,7 @@ impl BrPendingFs {
             .filter(|s| !s.is_empty())
             .peekable();
 
-        let mut curr: Self = self;
+        let mut curr = self;
 
         while let Some(name) = components.next() {
             let children = match curr {

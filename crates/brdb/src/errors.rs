@@ -28,6 +28,23 @@ impl BrError {
     }
 }
 
+// Helper trait for adding context to errors
+pub trait Wrap<T> {
+    fn about(self, name: impl Display) -> Result<T, BrError>;
+    fn about_f(self, name: impl FnMut() -> String) -> Result<T, BrError>;
+}
+impl<T, E> Wrap<T> for Result<T, E>
+where
+    BrError: From<E>,
+{
+    fn about(self, name: impl Display) -> Result<T, BrError> {
+        self.map_err(|e| BrError::from(e).wrap(name))
+    }
+    fn about_f(self, mut name: impl FnMut() -> String) -> Result<T, BrError> {
+        self.map_err(|e| BrError::from(e).wrap(name()))
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum BrFsError {
     #[error("{0}: {1}")]

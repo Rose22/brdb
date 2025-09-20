@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use itertools::Itertools;
 
 use crate::{
+    Wrap,
     errors::{BrError, BrdbWorldError},
     pending::BrPendingFs,
     schema::{BrdbSchema, BrdbSchemaGlobalData},
+    schemas::{BRICK_CHUNK_INDEX_SOA, BRICK_CHUNK_SOA, BRICK_WIRE_SOA},
     wrapper::{
         Brick, BrickChunkIndexSoA, BrickChunkSoA, ChunkIndex, ComponentChunkSoA, Entity,
         EntityChunkIndexSoA, EntityChunkSoA, LocalWirePortSource, OwnerTableSoA,
@@ -61,10 +63,10 @@ impl Default for UnsavedWorld {
         Self {
             global_data: Default::default(),
             owners: Default::default(),
-            component_schema: schemas::bricks_components_schema_min(),
+            component_schema: schemas::bricks_components_schema_min().to_owned(),
             grids: Default::default(),
             entity_chunks: Default::default(),
-            entity_schema: schemas::entities_chunks_schema(),
+            entity_schema: schemas::entities_chunks_schema().to_owned(),
             entity_chunk_index: Default::default(),
             minigame: Default::default(),
             environment: Default::default(),
@@ -337,5 +339,86 @@ impl UnsavedGrid {
             .entry(chunk)
             .or_insert_with(WireChunkSoA::default)
             .add_remote_wire(source, target);
+    }
+
+    /// This function converts a single unsaved grid into a pending folder
+    /// to be placed in Bricks/Grids/N:
+    ///  - (Bricks/Grids/N)/Components
+    ///  - (Bricks/Grids/N)/Wires
+    ///  - (Bricks/Grids/N)/ChunkIndex.mps
+    ///
+    /// `proc_brick_starting_index` can be obtained from global_data.proc_brick_starting_index()
+    pub fn to_pending(
+        self,
+        proc_brick_starting_index: u32,
+        component_schema: &BrdbSchema,
+    ) -> Result<BrPendingFs, BrError> {
+        use BrPendingFs::*;
+        let brick_chunk_index_schema = schemas::bricks_chunk_index_schema();
+        let brick_chunk_schema = schemas::bricks_chunks_schema();
+        let wires_schema = schemas::bricks_wires_schema();
+
+        let mut grid_dir = vec![(
+            "ChunkIndex.mps".to_owned(),
+            File(Some(
+                brick_chunk_index_schema
+                    .write_brdb(BRICK_CHUNK_INDEX_SOA, &self.chunk_index)
+                    .about_f(|| format!("ChunkIndex.mps"))?,
+            )),
+        )];
+
+        let brick_chunks_dir = self
+            .bricks
+            .into_iter()
+            .map(|(chunk, mut bricks)| {
+                bricks.procedural_brick_starting_index = proc_brick_starting_index;
+                Ok((
+                    format!("{chunk}.mps"),
+                    File(Some(
+                        brick_chunk_schema
+                            .write_brdb(BRICK_CHUNK_SOA, &bricks)
+                            .about_f(|| format!("Chunks/{chunk}.mps"))?,
+                    )),
+                ))
+            })
+            .collect::<Result<Vec<_>, BrError>>()?;
+        let component_chunks_dir = self
+            .components
+            .into_iter()
+            .map(|(chunk, components)| {
+                let buf = components
+                    .to_bytes(component_schema)
+                    .about_f(|| format!("Components/{chunk}.mps"))?;
+
+                Ok((format!("{chunk}.mps"), File(Some(buf))))
+            })
+            .collect::<Result<Vec<_>, BrError>>()?;
+        let wire_chunks_dir = self
+            .wires
+            .iter()
+            .map(|(chunk, wires)| {
+                Ok((
+                    format!("{chunk}.mps"),
+                    File(Some(
+                        wires_schema
+                            .write_brdb(BRICK_WIRE_SOA, wires)
+                            .about_f(|| format!("Wires/{chunk}.mps"))?,
+                    )),
+                ))
+            })
+            .collect::<Result<Vec<_>, BrError>>()?;
+
+        // Append non-empty chunk directories to the grid directory
+        if !brick_chunks_dir.is_empty() {
+            grid_dir.push(("Chunks".to_owned(), Folder(Some(brick_chunks_dir))));
+        }
+        if !component_chunks_dir.is_empty() {
+            grid_dir.push(("Components".to_owned(), Folder(Some(component_chunks_dir))));
+        }
+        if !wire_chunks_dir.is_empty() {
+            grid_dir.push(("Wires".to_owned(), Folder(Some(wire_chunks_dir))));
+        }
+
+        Ok(Folder(Some(grid_dir)))
     }
 }

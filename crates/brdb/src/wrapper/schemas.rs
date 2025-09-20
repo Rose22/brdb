@@ -1,4 +1,5 @@
 use crate::schema::BrdbSchema;
+use std::sync::OnceLock;
 
 pub const GLOBAL_DATA_SOA: &str = "BRSavedGlobalDataSoA";
 pub const BRICK_CHUNK_SOA: &str = "BRSavedBrickChunkSoA";
@@ -10,9 +11,12 @@ pub const ENTITY_CHUNK_INDEX_SOA: &str = "BRSavedEntityChunkIndexSoA";
 pub const OWNER_TABLE_SOA: &str = "BRSavedOwnerTableSoA";
 
 /// World/0/GlobalData.schema
-pub fn global_data_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn global_data_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedPrimaryAssetId {
     PrimaryAssetType: str,
     PrimaryAssetName: str,
@@ -27,15 +31,18 @@ struct BRSavedGlobalDataSoA {
     ComponentWirePortNames: str[],
     ExternalAssetReferences: BRSavedPrimaryAssetId[],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
-
 /// World/0/Bricks/ChunksShared.schema
-pub fn bricks_chunks_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn bricks_chunks_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedBitFlags {
     Flags: u8[flat],
 }
@@ -75,15 +82,19 @@ struct BRSavedBrickChunkSoA {
     MaterialIndices: u8[flat],
     ColorsAndAlphas: BRSavedBrickColor[flat],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Bricks/ChunkIndexShared.schema
-pub fn bricks_chunk_index_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn bricks_chunk_index_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedChunk3DIndex {
     X: i16,
     Y: i16,
@@ -95,15 +106,19 @@ struct BRSavedBrickChunkIndexSoA {
     NumComponents: u32[],
     NumWires: u32[],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Bricks/ComponentsShared.schema
-pub fn bricks_components_schema_min() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn bricks_components_schema_min() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedBrickComponentTypeCounter {
     TypeIndex: u32,
     NumInstances: u32,
@@ -127,15 +142,19 @@ struct BRSavedComponentChunkSoA {
     JointInitialRelativeOffsets: Vector3f[flat],
     JointInitialRelativeRotations: Quat4f[flat],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Bricks/ComponentsShared.schema
-pub fn bricks_components_schema_max() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn bricks_components_schema_max() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 enum EBrickAxis {
     EBrickAxis::X = 0,
     EBrickAxis::Y = 1,
@@ -501,15 +520,19 @@ struct BRSavedComponentChunkSoA {
     JointInitialRelativeOffsets: Vector3f[flat],
     JointInitialRelativeRotations: Quat4f[flat],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Bricks/WiresShared.schema
-pub fn bricks_wires_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn bricks_wires_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedBitFlags {
     Flags: u8[flat],
 }
@@ -542,15 +565,19 @@ struct BRSavedWireChunkSoA {
     LocalWireTargets: BRSavedWirePortTarget[],
     PendingPropagationFlags: BRSavedBitFlags,
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Owners.schema
-pub fn owners_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn owners_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRGuid {
     A: u32,
     B: u32,
@@ -566,15 +593,19 @@ struct BRSavedOwnerTableSoA {
     ComponentCounts: u32[],
     WireCounts: u32[],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Entities/ChunkIndex.schema
-pub fn entities_chunk_index_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn entities_chunk_index_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedChunk3DIndex {
     X: i16,
     Y: i16,
@@ -585,15 +616,19 @@ struct BRSavedEntityChunkIndexSoA {
     Chunk3DIndices: BRSavedChunk3DIndex[],
     NumEntities: u32[],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 /// World/0/Entities/ChunksShared.schema
-pub fn entities_chunks_schema() -> BrdbSchema {
-    let (enums, structs) = BrdbSchema::parse_to_meta(
-        "
+pub fn entities_chunks_schema() -> &'static BrdbSchema {
+    static SCHEMA: OnceLock<BrdbSchema> = OnceLock::new();
+
+    &SCHEMA.get_or_init(|| {
+        let (enums, structs) = BrdbSchema::parse_to_meta(
+            "
 struct BRSavedBitFlags {
     Flags: u8[flat],
 }
@@ -642,9 +677,10 @@ struct BRSavedEntityChunkSoA {
     AngularVelocities: Vector3f[flat],
     ColorsAndAlphas: BRSavedEntityColors[flat],
 }",
-    )
-    .unwrap();
-    BrdbSchema::from_meta(enums, structs)
+        )
+        .unwrap();
+        BrdbSchema::from_meta(enums, structs)
+    })
 }
 
 #[cfg(test)]

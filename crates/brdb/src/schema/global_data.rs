@@ -126,6 +126,22 @@ impl BrdbSchemaGlobalData {
             .to_owned()
             .into())
     }
+
+    /// `proc_brick_starting_index` needs to exist because the type ids of brick assets are
+    /// stored in the GlobalData, and the type ids of procedural
+    /// bricks are assigned starting from the end of the basic brick
+    /// asset names.
+    ///
+    /// When new brick assets are added, the length of the basic
+    /// brick asset names will increase, and the type ids of procedural
+    /// bricks in older chunks will not match the new
+    /// basic brick asset names.
+    ///
+    /// This offset allows older chunks to properly load, assuming the global
+    /// data does not change the order of brick asset names (by external tools)
+    pub fn proc_brick_starting_index(&self) -> u32 {
+        self.basic_brick_asset_names.len() as u32
+    }
 }
 
 impl AsBrdbValue for BrdbSchemaGlobalData {

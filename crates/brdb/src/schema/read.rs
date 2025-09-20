@@ -350,7 +350,7 @@ pub fn flat_type_size(schema: &BrdbSchema, ty: &str) -> usize {
 
 /// Read a flat type from a buffer. Flat types are memory dumps of structs or numeric types and
 /// are not encoded in a message pack format.
-fn read_flat_type(
+pub fn read_flat_type(
     schema: &Arc<BrdbSchema>,
     ty: &str,
     buf: &mut impl Read,
