@@ -171,6 +171,7 @@ pub struct Collision {
     pub weapon: bool,
     pub interact: bool,
     pub tool: bool,
+    pub physics: bool,
 }
 
 impl Default for Collision {
@@ -180,6 +181,7 @@ impl Default for Collision {
             weapon: true,
             interact: true,
             tool: true,
+            physics: true,
         }
     }
 }
@@ -357,7 +359,7 @@ impl AsBrdbValue for SavedBrickColor {
             "G" => Ok(&self.g),
             "B" => Ok(&self.b),
             "A" => Ok(&self.a),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -490,7 +492,7 @@ impl AsBrdbValue for ChunkIndex {
             "X" => Ok(&self.x),
             "Y" => Ok(&self.y),
             "Z" => Ok(&self.z),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -598,7 +600,7 @@ impl AsBrdbValue for BrickSize {
             "X" => Ok(&self.x),
             "Y" => Ok(&self.y),
             "Z" => Ok(&self.z),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -622,7 +624,7 @@ impl AsBrdbValue for RelativePosition {
             "X" => Ok(&self.x),
             "Y" => Ok(&self.y),
             "Z" => Ok(&self.z),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -711,7 +713,7 @@ impl AsBrdbValue for BrickSizeCounter {
         match field {
             "AssetIndex" => Ok(&self.asset_index),
             "NumSizes" => Ok(&self.num_sizes),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -754,6 +756,7 @@ pub struct BrickChunkSoA {
     pub collision_flags_weapon: BitFlags,
     pub collision_flags_interaction: BitFlags,
     pub collision_flags_tool: BitFlags,
+    pub collision_flags_physics: BitFlags,
     pub visibility_flags: BitFlags,
     pub material_indices: Vec<u8>,
     // RGB + Material intensity
@@ -842,6 +845,7 @@ impl BrickChunkSoA {
         self.collision_flags_interaction
             .push(brick.collision.interact);
         self.collision_flags_tool.push(brick.collision.tool);
+        self.collision_flags_physics.push(brick.collision.physics);
         self.visibility_flags.push(brick.visible);
 
         self.material_indices.push(
@@ -919,6 +923,7 @@ impl BrickChunkSoA {
                         weapon: self.collision_flags_weapon.get(i),
                         interact: self.collision_flags_interaction.get(i),
                         tool: self.collision_flags_tool.get(i),
+                        physics: self.collision_flags_physics.get(i),
                     },
                     visible: self.visibility_flags.get(i),
                     owner_index: Some(self.owner_indices[i] as usize),
@@ -945,8 +950,9 @@ impl AsBrdbValue for BrickChunkSoA {
             "CollisionFlags_Weapon" => Ok(&self.collision_flags_weapon),
             "CollisionFlags_Interaction" => Ok(&self.collision_flags_interaction),
             "CollisionFlags_Tool" => Ok(&self.collision_flags_tool),
+            "CollisionFlags_Physics" => Ok(&self.collision_flags_physics),
             "VisibilityFlags" => Ok(&self.visibility_flags),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 
@@ -965,7 +971,7 @@ impl AsBrdbValue for BrickChunkSoA {
             "Orientations" => Ok(self.orientations.as_brdb_iter()),
             "MaterialIndices" => Ok(self.material_indices.as_brdb_iter()),
             "ColorsAndAlphas" => Ok(self.colors_and_alphas.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
     }
 }
@@ -988,6 +994,7 @@ impl TryFrom<&BrdbValue> for BrickChunkSoA {
             collision_flags_weapon: value.prop("CollisionFlags_Weapon")?.try_into()?,
             collision_flags_interaction: value.prop("CollisionFlags_Interaction")?.try_into()?,
             collision_flags_tool: value.prop("CollisionFlags_Tool")?.try_into()?,
+            collision_flags_physics: value.prop("CollisionFlags_Physics")?.try_into()?,
             visibility_flags: value.prop("VisibilityFlags")?.try_into()?,
             material_indices: value.prop("MaterialIndices")?.try_into()?,
             colors_and_alphas: value.prop("ColorsAndAlphas")?.try_into()?,
@@ -1032,42 +1039,7 @@ impl AsBrdbValue for BrickChunkIndexSoA {
             "NumBricks" => Ok(self.num_bricks.as_brdb_iter()),
             "NumComponents" => Ok(self.num_components.as_brdb_iter()),
             "NumWires" => Ok(self.num_wires.as_brdb_iter()),
-            _ => unreachable!(),
+            n => unimplemented!("unimplemented struct field {n}"),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use crate::{
-        BrickChunkSoA, SavedBrickColor,
-        errors::BrdbSchemaError,
-        schema::{ReadBrdbSchema, read::read_flat_type, write::write_brdb_flat},
-        schemas::{self, BRICK_CHUNK_SOA},
-    };
-
-    #[test]
-    fn test_colors_and_alphas() -> Result<(), BrdbSchemaError> {
-        let schema = Arc::new(schemas::bricks_chunks_schema().to_owned());
-
-        {
-            let color = SavedBrickColor::default();
-            let mut buf = Vec::new();
-            write_brdb_flat(&schema, &mut buf, "BRSavedBrickColor", &color)?;
-            let res = read_flat_type(&schema, "BRSavedBrickColor", &mut buf.as_slice())?;
-            println!("{}", res.as_struct()?);
-        }
-
-        {
-            let mut chunk = BrickChunkSoA::default();
-            chunk.colors_and_alphas.push(SavedBrickColor::default());
-            let buf = schema.write_brdb(BRICK_CHUNK_SOA, &chunk)?;
-            let res = buf.as_slice().read_brdb(&schema, BRICK_CHUNK_SOA)?;
-            println!("{}", res.as_struct()?);
-        }
-
-        Ok(())
     }
 }

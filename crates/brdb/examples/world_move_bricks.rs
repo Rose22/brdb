@@ -6,6 +6,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = PathBuf::from("world.brdb");
     let dst = PathBuf::from("world_patched.brdb");
 
+    println!("Warning - This code will break if the brick chunk struct changes!!");
+
     let db = Brdb::open(path)?.into_reader();
 
     let data = db.global_data()?;

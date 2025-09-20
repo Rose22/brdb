@@ -78,6 +78,7 @@ struct BRSavedBrickChunkSoA {
     CollisionFlags_Weapon: BRSavedBitFlags,
     CollisionFlags_Interaction: BRSavedBitFlags,
     CollisionFlags_Tool: BRSavedBitFlags,
+    CollisionFlags_Physics: BRSavedBitFlags,
     VisibilityFlags: BRSavedBitFlags,
     MaterialIndices: u8[flat],
     ColorsAndAlphas: BRSavedBrickColor[flat],
