@@ -898,7 +898,8 @@ pub struct BrickChunkSoA {
 }
 
 impl BrickChunkSoA {
-    /// Add a brick to the chunk. All basic bricks must be added before procedural bricks.
+    /// Add a brick to the chunk. Brick asset types cannot change after adding the first brick or
+    /// it will break the world
     pub fn add_brick(&mut self, global_data: &BrdbSchemaGlobalData, brick: &Brick) {
         use BrickType::*;
 
@@ -995,11 +996,7 @@ impl BrickChunkSoA {
         chunk_index: ChunkIndex,
         global_data: Arc<BrdbSchemaGlobalData>,
     ) -> Result<impl Iterator<Item = Result<Brick, BrdbSchemaError>> + '_, BrdbSchemaError> {
-        // TODO: this may need to be the procedural_brick_starting_index instead...
-        let num_basic_bricks = self
-            .brick_type_indices
-            .len()
-            .saturating_sub(self.brick_sizes.len());
+        let proc_brick_index = self.procedural_brick_starting_index as usize;
 
         // Zip the brick size counters with the brick sizes
         let proc_brick_sizes = self
@@ -1007,6 +1004,7 @@ impl BrickChunkSoA {
             .iter()
             .copied()
             .zip(
+                // repeat the asset index based on the number of sizes for each asset
                 self.brick_size_counters
                     .iter()
                     .flat_map(|c| (0..c.num_sizes).map(|_| c.asset_index)),
@@ -1020,11 +1018,11 @@ impl BrickChunkSoA {
             .map(move |(i, &ty_index)| {
                 let ty_index = ty_index as usize;
 
-                let asset = if ty_index < num_basic_bricks {
+                let asset = if ty_index < proc_brick_index {
                     BrickType::Basic(global_data.basic_brick_asset_by_index(ty_index)?)
                 } else {
                     // Lookup the procedural brick size by an index offset by the number of basic brick types
-                    let size_index = ty_index.saturating_sub(num_basic_bricks);
+                    let size_index = ty_index.saturating_sub(proc_brick_index);
                     let (size, asset_index) =
                         proc_brick_sizes.get(size_index).ok_or_else(|| {
                             BrdbSchemaError::Wrapped(

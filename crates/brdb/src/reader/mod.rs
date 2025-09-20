@@ -4,6 +4,7 @@ use indexmap::IndexSet;
 pub use reader_trait::BrFsReader;
 use std::{
     collections::HashSet,
+    fmt::Display,
     ops::Deref,
     sync::{Arc, RwLock},
 };
@@ -81,6 +82,11 @@ impl AsRef<ChunkIndex> for ChunkMeta {
 impl From<ChunkMeta> for ChunkIndex {
     fn from(value: ChunkMeta) -> Self {
         value.index
+    }
+}
+impl Display for ChunkMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.index)
     }
 }
 
