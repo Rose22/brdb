@@ -26,6 +26,10 @@ impl BrdbStruct {
         let key = self.schema.intern.get(prop.as_ref())?;
         self.properties.get(&key)
     }
+    pub fn get_mut(&mut self, prop: impl AsRef<str>) -> Option<&mut BrdbValue> {
+        let key = self.schema.intern.get(prop.as_ref())?;
+        self.properties.get_mut(&key)
+    }
 
     pub fn get_name(&self) -> &str {
         self.schema
@@ -42,6 +46,19 @@ impl BrdbStruct {
                     .intern
                     .lookup(self.name)
                     .unwrap_or_else(|| "unknown struct".to_string()),
+                prop.to_owned(),
+            )
+        })
+    }
+
+    pub fn prop_mut(&mut self, prop: impl AsRef<str>) -> Result<&mut BrdbValue, BrdbSchemaError> {
+        let prop = prop.as_ref();
+        let schema_name = self.schema.intern.lookup(self.name)
+            .unwrap_or_else(|| "unknown struct".to_string());
+
+        self.get_mut(prop).ok_or_else(|| {
+            BrdbSchemaError::MissingStructField(
+                schema_name,
                 prop.to_owned(),
             )
         })
@@ -271,6 +288,16 @@ impl BrdbValue {
             ))
         }
     }
+    pub fn as_struct_mut(&mut self) -> Result<&mut BrdbStruct, BrdbSchemaError> {
+        if let Self::Struct(v) = self {
+            Ok(v)
+        } else {
+            Err(BrdbSchemaError::ExpectedType(
+                "struct".to_owned(),
+                self.get_type().to_string(),
+            ))
+        }
+    }
 
     pub fn prop(&self, prop: impl AsRef<str>) -> Result<&BrdbValue, BrdbSchemaError> {
         let prop = prop.as_ref();
@@ -284,6 +311,28 @@ impl BrdbValue {
                 prop.to_owned(),
             )
         })
+    }
+    pub fn prop_mut(&mut self, prop: impl AsRef<str>) -> Result<&mut BrdbValue, BrdbSchemaError> {
+        let prop = prop.as_ref();
+        let s = self.as_struct_mut()?;
+        let schema_name = s.schema.intern.lookup(s.name)
+            .unwrap_or_else(|| "unknown struct".to_string());
+
+        s.get_mut(prop).ok_or_else(|| {
+            BrdbSchemaError::MissingStructField(
+                schema_name,
+                prop.to_owned(),
+            )
+        })
+    }
+
+    pub fn set_prop(
+        &mut self,
+        prop: impl AsRef<str>,
+        value: BrdbValue,
+    ) -> Result<(), BrdbSchemaError> {
+        let s = self.as_struct_mut()?;
+        s.set_prop(prop, value)
     }
 
     pub fn as_array(&self) -> Result<&Vec<BrdbValue>, BrdbSchemaError> {

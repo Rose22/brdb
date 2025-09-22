@@ -275,11 +275,11 @@ pub fn write_int(buf: &mut impl Write, value: i64) -> Result<(), BrdbSchemaError
 /// Write the smallest possible unsigned integer representation of `value` to the buffer.
 pub fn write_u8(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaError> {
     if value <= 127 {
-        rmp::encode::write_pfix(buf, value as u8)?;
+        rmp::encode::write_pfix(buf, (value as i8).try_into().unwrap())?;
     } else if value > 256 - 32 && value <= u8::MAX as u64 {
         rmp::encode::write_nfix(buf, value as i8)?;
     } else {
-        rmp::encode::write_u8(buf, value as u8)?;
+        rmp::encode::write_i8(buf, value as i8)?;
     }
     Ok(())
 }
@@ -302,25 +302,29 @@ pub fn write_uint(buf: &mut impl Write, value: u64) -> Result<(), BrdbSchemaErro
 
 pub fn write_float32(buf: &mut impl Write, value: f32) -> Result<(), BrdbSchemaError> {
     // Attempt to write as ints on whole numbers less than 8 or 16 bits
+    /*
     if value.eq(&value.round()) && (value as u16) < u16::MAX && (value as i16) > i16::MIN {
         write_int(buf, value as i64)?;
     } else {
-        rmp::encode::write_f32(buf, value)?;
-    }
+    */
+    rmp::encode::write_f32(buf, value)?;
+    // }
     Ok(())
 }
 
 pub fn write_float64(buf: &mut impl Write, value: f64) -> Result<(), BrdbSchemaError> {
     // Attempt to write as ints on whole numbers less than 8, 16, or 32 bits
+    /*
     if value.eq(&value.round()) && (value as u32) < u32::MAX && (value as i32) > i32::MIN {
         write_int(buf, value as i64)?;
     } else {
+    */
         rmp::encode::write_f64(buf, value)?;
-    }
+    // }
     Ok(())
 }
 
-fn write_flat_type(
+pub fn write_flat_type(
     schema: &BrdbSchema,
     buf: &mut impl Write,
     ty: &str,
@@ -546,7 +550,7 @@ pub fn write_brdb(
     Ok(())
 }
 
-fn write_brdb_flat(
+pub fn write_brdb_flat(
     schema: &BrdbSchema,
     buf: &mut impl Write,
     ty: &str,
